@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <!-- Meta-Angaben für Zeichensatz und responsives Design -->
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Messstation: Druck & Durchfluss</title>
+  <!-- Einbinden der CSS-Datei -->
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <!-- Hauptcontainer der Seite -->
+  <div class="container">
+    <h1>Messstation: Druck & Durchfluss</h1>
+    <!-- Anzeige der aktuellen Zeit -->
+    <div id="timeDisplay">Zeit: --:--:--</div>
+    
+    <!-- Bereich für Sensoranzeigen -->
+    <div class="cards">
+      <!-- Card für die Drucksensoren -->
+      <div class="card" id="pressureCard">
+        <h2>Drucksensoren (bar)</h2>
+        <div id="pressureData">Lade Daten...</div>
+        <!-- Button für eine optionale Kalibrierungsfunktion -->
+        <button onclick="alert('Kalibrierung öffnen')">Kalibrieren</button>
+      </div>
+      <!-- Card für den Durchfluss -->
+      <div class="card" id="flowCard">
+        <h2>Durchfluss</h2>
+        <div id="flowData">Lade Daten...</div>
+        <button onclick="clearFlow()">Kumulativen Durchfluss zurücksetzen</button>
+      </div>
+    </div>
+    
+    <!-- Steuerungsknöpfe für Recording und Logverwaltung -->
+    <div class="controls">
+      <button onclick="toggleRecording()">Recording Start/Stop</button>
+      <button onclick="downloadLog()">Log herunterladen</button>
+      <button onclick="deleteLog()">Log löschen</button>
+    </div>
+  </div>
+  <!-- Einbinden der JavaScript-Datei -->
+  <script src="/script.js"></script>
+</body>
+</html>
