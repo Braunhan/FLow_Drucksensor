@@ -26,51 +26,64 @@
 #include <EEPROM.h>           // EEPROM-Verwaltung (Kalibrierungswerte speichern)
 #include <SPIFFS.h>           // SPIFFS (Dateisystem auf dem ESP32)
 #include <time.h>             // Zeitfunktionen (für NTP und Zeitstempel)
+#include <math.h>             // Für isnan()
 
 /* ====================================================
- * 2. Globale Konfigurationen und Definitionen
+ * 2. Globale Variablen und Konfigurationen
  * ==================================================== */
 
-// ----- WLAN-Konfiguration (Access Point) -----
-const char* ssid = "Druck-Durchflusssensor";  // SSID des AP
-const char* password = "12345678";             // Passwort des AP
+/* ----- WLAN Konfiguration ----- */
+const char* ssid = "Druck-Durchflusssensor";  // SSID des Access Points
+const char* password = "12345678";             // Passwort des Access Points
 IPAddress local_IP(192, 168, 1, 1);            // Lokale IP-Adresse des ESP32
-IPAddress gateway(192, 168, 1, 1);             // Gateway-Adresse
+IPAddress gateway(192, 168, 1, 1);             // Gateway (gleich wie IP)
 IPAddress subnet(255, 255, 255, 0);            // Subnetzmaske
 
-// ----- ADS1115-Konfiguration für Drucksensoren ----- 
-Adafruit_ADS1115 ads;                          // Erstellen eines ADS1115-Objekts
-#define I2C_SDA 21                            // I²C SDA-Pin
-#define I2C_SCL 22                            // I²C SCL-Pin
-#define ADS_VOLTAGE_PER_BIT 0.000125          // Umrechnung: 0.000125 Volt pro Bit (bei GAIN_ONE)
+/* ----- ADS1115 Konfiguration ----- */
+Adafruit_ADS1115 ads;                          // Objekt für den ADS1115
+#define I2C_SDA 21                            // I²C SDA-Pin (Datenleitung)
+#define I2C_SCL 22                            // I²C SCL-Pin (Taktleitung)
+#define ADS_VOLTAGE_PER_BIT 0.000125          // Umrechnungsfaktor: 0.000125 V pro Bit
 
-// ----- Konfiguration der Durchflusssensoren (digitale Sensoren) -----
+/* ----- Kalibrierungsvariablen für Drucksensoren -----
+   Für jeden der 4 Sensoren werden nun vier Werte verwendet:
+     - pressureSensor_V_min: Minimal gemessene Spannung, die 0 bar (0 PSI) entspricht (Standard: 0.5 V)
+     - pressureSensor_V_max: Maximal gemessene Spannung, z. B. 4.5 V
+     - pressureSensor_PSI_min: Der Druck in PSI, der der minimalen Spannung entspricht (normalerweise 0 PSI)
+     - pressureSensor_PSI_max: Der Druck in PSI, der bei der maximalen Spannung erreicht wird (z. B. 30 PSI)
+     
+   Daraus wird in der Druckmessfunktion der Umrechnungsfaktor berechnet:
+      convFactor = (PSI_max - PSI_min) / (V_max - V_min)
+*/
+float pressureSensor_V_min[4]    = {0.5, 0.5, 0.5, 0.5};
+float pressureSensor_V_max[4]    = {4.5, 4.5, 4.5, 4.5};
+float pressureSensor_PSI_min[4]  = {0.0, 0.0, 0.0, 0.0};
+float pressureSensor_PSI_max[4]  = {30.0, 30.0, 30.0, 30.0};
+
+// Globale Variable zum Speichern der kalibrierten v_min-Werte für jeden Sensor
+float pressureSensor_V_min_cal[4] = {0.5, 0.5, 0.5, 0.5};
+
+/* ----- Durchflusssensor Konfiguration ----- */
 #define FLOW_SENSOR1_PIN 32                   // Pin für Durchflusssensor 1
 #define FLOW_SENSOR2_PIN 33                   // Pin für Durchflusssensor 2
 volatile uint32_t pulseCount1 = 0;             // Impulszähler für Sensor 1 (wird in ISR erhöht)
 volatile uint32_t pulseCount2 = 0;             // Impulszähler für Sensor 2 (wird in ISR erhöht)
-uint32_t lastPulseCount1 = 0;                  // Letzter Zählerstand für Sensor 1 (zur Delta-Berechnung)
-uint32_t lastPulseCount2 = 0;                  // Letzter Zählerstand für Sensor 2 (zur Delta-Berechnung)
-float flowRate1 = 0.0;                         // Momentaner Durchfluss (L/min) für Sensor 1
-float flowRate2 = 0.0;                         // Momentaner Durchfluss (L/min) für Sensor 2
-float cumulativeFlow1 = 0.0;                   // Kumulativer Durchfluss (L) für Sensor 1
-float cumulativeFlow2 = 0.0;                   // Kumulativer Durchfluss (L) für Sensor 2
+uint32_t lastPulseCount1 = 0;                  // Letzter Zählerstand Sensor 1
+uint32_t lastPulseCount2 = 0;                  // Letzter Zählerstand Sensor 2
+float flowRate1 = 0.0;                         // Momentaner Durchfluss Sensor 1 (L/min)
+float flowRate2 = 0.0;                         // Momentaner Durchfluss Sensor 2 (L/min)
+float cumulativeFlow1 = 0.0;                   // Kumulativer Durchfluss Sensor 1 (L)
+float cumulativeFlow2 = 0.0;                   // Kumulativer Durchfluss Sensor 2 (L)
 
-// ----- Drucksensor-Kalibrierung -----
-// Früher wurde immer 0,5 V als Referenz genommen (0 PSI).
-// Zur späteren Kalibrierung wird hier sensorZero geführt.
-// Zur Fehlerbehebung wurde hier die Umrechnung auf den festen Wert 0,5 V umgestellt.
-float sensorZero[4] = {0.5, 0.5, 0.5, 0.5};
-
-// ----- Logging-Konfiguration -----
-bool recording = false;                        // Aufnahmemodus (Recording): Ein/Aus
+/* ----- Logging Konfiguration ----- */
+bool recording = false;                        // Datenlogging: Ein (true) / Aus (false)
 const char* logFileName = "/log.csv";          // Dateiname für Logdaten im SPIFFS
 
-// ----- Zeitsteuerung (Messintervall) ----- 
-unsigned long previousMillis = 0;              // Hilfsvariable für Zeitmessung
-const unsigned long interval = 1000;           // Intervall in Millisekunden (1 Sekunde)
+/* ----- Zeitsteuerung ----- */
+unsigned long previousMillis = 0;              // Hilfsvariable für Zeitmessung in der Loop
+const unsigned long interval = 1000;           // Messintervall (1 Sekunde)
 
-// ----- Webserver-Objekt -----
+/* ----- Webserver Konfiguration ----- */
 WebServer server(80);                          // Webserver, der auf Port 80 lauscht
 
 /* ====================================================
@@ -78,17 +91,17 @@ WebServer server(80);                          // Webserver, der auf Port 80 lau
  * ==================================================== */
 
 // Sensor- und Logging-Funktionen
-float readPressureSensor(uint8_t channel);     // Liest den Drucksensor am angegebenen Kanal aus
+float readPressureSensor(uint8_t channel);     // Liest den Drucksensor an einem Kanal und berechnet den Druck in bar
 void logData();                                // Schreibt Messdaten als CSV-Zeile in SPIFFS
-String getTimeString();                        // Gibt die aktuelle Systemzeit als String zurück
+String getTimeString();                        // Gibt den aktuellen Zeitstempel als String zurück
 
 // Interrupt-Service-Routinen für Durchflusssensoren
-void IRAM_ATTR flowSensor1ISR();               // ISR für Durchflusssensor 1 (wird bei FALLING-Edge aufgerufen)
-void IRAM_ATTR flowSensor2ISR();               // ISR für Durchflusssensor 2 (wird bei FALLING-Edge aufgerufen)
+void IRAM_ATTR flowSensor1ISR();               // ISR für Durchflusssensor 1 (FALLING-Edge)
+void IRAM_ATTR flowSensor2ISR();               // ISR für Durchflusssensor 2 (FALLING-Edge)
 
 // Funktionen zur Kalibrierung und EEPROM-Verwaltung
 void loadCalibration();                        // Lädt Kalibrierungswerte aus dem EEPROM
-void saveCalibration();                        // Speichert aktuelle Kalibrierungswerte ins EEPROM
+void saveCalibration();                        // Speichert Kalibrierungswerte ins EEPROM
 
 // Webserver-Handler (HTTP-Endpunkte)
 // Statische Dateien (Webseitendateien)
@@ -104,7 +117,10 @@ void handleDownloadLog();                      // Ermöglicht das Herunterladen 
 void handleToggleRecording();                  // Schaltet das Recording (Datenlogging) um
 void handleDeleteLog();                        // Löscht die Logdatei
 void handleClearCumulativeFlow();              // Setzt den kumulativen Durchfluss zurück
-void handleSetCalibration();                   // Setzt den Kalibrierungswert für einen Sensor
+void handleUpdateCalibration();                // Aktualisiert die Kalibrierungswerte für einen Drucksensor
+
+// Neuer Endpoint: Kalibrierung des v_min-Werts über Web-Interface
+void handleCalibrateVmin();
 
 /* ====================================================
  * 4. Setup – Initialisierung aller Module
@@ -115,33 +131,28 @@ void setup() {
   delay(1000);
 
   // ----- EEPROM initialisieren -----
-  // 64 Byte reichen zur Speicherung von 4 Float-Werten (Kalibrierungswerte)
-  EEPROM.begin(64);
+  // EEPROM-Größe: 4 Sensoren * 4 Float-Werte = 16 Floats
+  EEPROM.begin(16 * sizeof(float));
   loadCalibration();
 
   // ----- I²C initialisieren -----
-  // Initialisiert den I²C-Bus mit den festgelegten SDA- und SCL-Pins
   Wire.begin(I2C_SDA, I2C_SCL);
 
   // ----- ADS1115 initialisieren -----
-  // Suche solange nach dem ADS1115, bis es gefunden wurde
   Serial.println("Suche ADS1115...");
   while (!ads.begin(0x48)) { // 0x48 ist die Standardadresse
     Serial.println("ADS1115 nicht gefunden, versuche erneut in 1 Sekunde...");
     delay(1000);
   }
   Serial.println("ADS1115 erkannt!");
-  // Setze den Gain auf GAIN_ONE (optimal für den Messbereich 0,5V bis 4,5V)
   ads.setGain(GAIN_ONE);
 
   // ----- SPIFFS initialisieren -----
-  // SPIFFS wird zur Speicherung von Webseitendateien und Logs verwendet.
-  if (!SPIFFS.begin(true)) { // Falls nötig, erfolgt eine automatische Formatierung
+  if (!SPIFFS.begin(true)) {
     Serial.println("SPIFFS konnte nicht eingebunden werden!");
   }
 
   // ----- WLAN im Access Point-Modus konfigurieren -----
-  // Der ESP32 erstellt einen eigenen WLAN-Hotspot
   WiFi.softAPConfig(local_IP, gateway, subnet);
   WiFi.softAP(ssid, password);
   Serial.print("Access Point IP: ");
@@ -154,7 +165,7 @@ void setup() {
   server.on("/style.css", HTTP_GET, handleCSS);
   server.on("/script.js", HTTP_GET, handleJS);
 
-  // API-Endpunkte für Sensorwerte, Zeit, Logging und Kalibrierung
+  // API-Endpunkte
   server.on("/api/sensorwerte", HTTP_GET, handleSensorwerte);
   server.on("/getTime", HTTP_GET, handleGetTime);
   server.on("/setTime", HTTP_GET, handleSetTime);
@@ -162,23 +173,21 @@ void setup() {
   server.on("/toggleRecording", HTTP_GET, handleToggleRecording);
   server.on("/deleteLog", HTTP_GET, handleDeleteLog);
   server.on("/clearCumulativeFlow", HTTP_GET, handleClearCumulativeFlow);
-  server.on("/setCalibration", HTTP_GET, handleSetCalibration);
+  server.on("/updateCalibration", HTTP_GET, handleUpdateCalibration);
+  // Neuer Endpoint für die dynamische Kalibrierung von v_min:
+  server.on("/calibrateVmin", HTTP_GET, handleCalibrateVmin);
 
-  // Starte den Webserver
   server.begin();
 
-  // ----- Konfiguration der Durchflusssensor-Pins -----
-  // Verwende interne Pullup-Widerstände, um Fehltrigger zu minimieren
+  // ----- Durchflusssensor-Pins konfigurieren -----
   pinMode(FLOW_SENSOR1_PIN, INPUT_PULLUP);
   pinMode(FLOW_SENSOR2_PIN, INPUT_PULLUP);
 
-  // ----- Interrupts für die Durchflusssensoren binden -----
-  // Bei fallender Flanke (FALLING) wird die jeweilige ISR aufgerufen.
+  // ----- Interrupts binden -----
   attachInterrupt(digitalPinToInterrupt(FLOW_SENSOR1_PIN), flowSensor1ISR, FALLING);
   attachInterrupt(digitalPinToInterrupt(FLOW_SENSOR2_PIN), flowSensor2ISR, FALLING);
 
   // ----- Zeitsystem initialisieren -----
-  // Synchronisation mit einem NTP-Server ("pool.ntp.org") zur korrekten Zeitstempelung
   configTime(0, 0, "pool.ntp.org");
 }
 
@@ -186,42 +195,35 @@ void setup() {
  * 5. Loop – Hauptprogrammzyklus
  * ==================================================== */
 void loop() {
-  // Bearbeite eingehende HTTP-Anfragen
   server.handleClient();
 
-  // Zeitgesteuerte Aufgaben: Alle 1 Sekunde
   unsigned long currentMillis = millis();
   if (currentMillis - previousMillis >= interval) {
     previousMillis = currentMillis;
 
     // ----- a) Drucksensoren auslesen -----
-    // Lese alle 4 Kanäle des ADS1115 und berechne den Druck in bar.
     float pressures[4];
     for (uint8_t i = 0; i < 4; i++) {
       pressures[i] = readPressureSensor(i);
     }
 
     // ----- b) Durchfluss auswerten -----
-    // Deaktiviere kurzzeitig Interrupts, um konsistente Zählerstände zu erhalten.
     noInterrupts();
     uint32_t currentPulse1 = pulseCount1;
     uint32_t currentPulse2 = pulseCount2;
     interrupts();
 
-    // Berechne die Impulsdifferenz seit der letzten Auswertung.
     uint32_t delta1 = currentPulse1 - lastPulseCount1;
     uint32_t delta2 = currentPulse2 - lastPulseCount2;
     lastPulseCount1 = currentPulse1;
     lastPulseCount2 = currentPulse2;
 
-    // Berechne den momentanen Durchfluss in L/min (Impulsfrequenz in Hz / 98)
     flowRate1 = delta1 / 98.0;
     flowRate2 = delta2 / 98.0;
-    // Aktualisiere den kumulativen Durchfluss (Umrechnung: L/min in Liter pro Sekunde)
     cumulativeFlow1 += flowRate1 / 60.0;
     cumulativeFlow2 += flowRate2 / 60.0;
 
-    // Zusätzliche Debug-Ausgabe für die Flow-Werte
+    // Debug-Ausgabe für Flow-Werte
     Serial.print("Puls1: ");
     Serial.print(delta1);
     Serial.print(" / Flow1: ");
@@ -248,14 +250,12 @@ void loop() {
 }
 
 /* ====================================================
- * 6. Interrupt Service Routinen (ISRs) für Durchflusssensoren
+ * 6. Interrupt Service Routinen (ISRs)
  * ==================================================== */
-// Erhöht den Impulszähler für Sensor 1, wenn ein Impuls erkannt wird.
 void IRAM_ATTR flowSensor1ISR() {
   pulseCount1++;
 }
 
-// Erhöht den Impulszähler für Sensor 2, wenn ein Impuls erkannt wird.
 void IRAM_ATTR flowSensor2ISR() {
   pulseCount2++;
 }
@@ -263,18 +263,10 @@ void IRAM_ATTR flowSensor2ISR() {
 /* ====================================================
  * 7. Funktionen zur Drucksensor-Abfrage und Datenlogging
  * ==================================================== */
-
-// Liest den angegebenen Drucksensor (Kanal) aus und wandelt den gemessenen
-// Spannungswert in einen Druck in bar um. Hier wird wieder der feste Referenzwert
-// 0,5 V genutzt, um die Umrechnung so durchzuführen wie im alten Code.
-// Formel: PSI = (Spannung - 0,5) * 7.5, Bar = PSI / 14.5038
 float readPressureSensor(uint8_t channel) {
-  // Lese den Rohwert des ADC am entsprechenden Kanal
   int16_t rawValue = ads.readADC_SingleEnded(channel);
-  // Berechne die Spannung anhand des Umrechnungsfaktors
   float voltage = rawValue * ADS_VOLTAGE_PER_BIT;
 
-  // Debug-Ausgabe: Zeige Kanal, Rohwert und Spannung an
   Serial.print("Kanal ");
   Serial.print(channel);
   Serial.print(" Rohwert: ");
@@ -283,13 +275,15 @@ float readPressureSensor(uint8_t channel) {
   Serial.print(voltage, 3);
   Serial.print(" V   ");
 
-  // Umrechnung der Spannung in PSI unter Verwendung des festen Offsets 0,5 V
-  float pressurePSI = (voltage - 0.5) * 7.5;
-  if (pressurePSI < 0) pressurePSI = 0;  // Verhindere negative Werte
-  // Umrechnung von PSI in bar
+  // Berechnung des Umrechnungsfaktors:
+  float denominator = pressureSensor_V_max[channel] - pressureSensor_V_min[channel];
+  float convFactor = (denominator != 0) ? (pressureSensor_PSI_max[channel] - pressureSensor_PSI_min[channel]) / denominator : 0;
+  
+  // Lineare Umrechnung: (gemessene Spannung - V_min) * convFactor + PSI_min
+  float pressurePSI = (voltage - pressureSensor_V_min[channel]) * convFactor + pressureSensor_PSI_min[channel];
+  if (pressurePSI < 0) pressurePSI = 0;
   float pressureBar = pressurePSI / 14.5038;
 
-  // Debug-Ausgabe: Zeige den berechneten Druck an
   Serial.print("  Druck: ");
   Serial.print(pressureBar, 3);
   Serial.println(" bar");
@@ -297,8 +291,6 @@ float readPressureSensor(uint8_t channel) {
   return pressureBar;
 }
 
-// Schreibt eine Zeile mit Messdaten in eine CSV-Datei im SPIFFS.
-// Fügt bei einer neuen Datei zuerst eine Kopfzeile ein.
 void logData() {
   File file = SPIFFS.open(logFileName, FILE_APPEND);
   if (!file) {
@@ -306,22 +298,18 @@ void logData() {
     return;
   }
 
-  // Falls die Datei leer ist, wird eine Kopfzeile geschrieben.
   if (file.size() == 0) {
     String header = "Timestamp,Pressure1 (bar),Pressure2 (bar),Pressure3 (bar),Pressure4 (bar),"
                     "FlowRate1 (L/min),FlowRate2 (L/min),CumulativeFlow1 (L),CumulativeFlow2 (L)\n";
     file.print(header);
   }
 
-  // Erstelle den Zeitstempel
   String timeStr = getTimeString();
-  // Lese alle Drucksensoren aus
   float pressures[4];
   for (uint8_t i = 0; i < 4; i++) {
     pressures[i] = readPressureSensor(i);
   }
 
-  // Erstelle die CSV-Zeile
   String line = "";
   line += timeStr + ",";
   for (uint8_t i = 0; i < 4; i++) {
@@ -336,7 +324,6 @@ void logData() {
   file.close();
 }
 
-// Gibt die aktuelle Systemzeit als formatierten String zurück (YYYY-MM-DD HH:MM:SS)
 String getTimeString() {
   time_t now = time(nullptr);
   struct tm timeinfo;
@@ -351,11 +338,6 @@ String getTimeString() {
 /* ====================================================
  * 8. Webserver-Handler: Ausliefern statischer Dateien und API-Endpunkte
  * ==================================================== */
-
-// ----- Auslieferung statischer Dateien ----- 
-
-// Liefert die Datei "index.html" aus dem SPIFFS.
-// Falls die Datei nicht existiert, wird ein 404-Fehler zurückgegeben.
 void handleRoot() {
   if (SPIFFS.exists("/index.html")) {
     File file = SPIFFS.open("/index.html", FILE_READ);
@@ -366,7 +348,6 @@ void handleRoot() {
   }
 }
 
-// Liefert die Datei "style.css" aus dem SPIFFS.
 void handleCSS() {
   if (SPIFFS.exists("/style.css")) {
     File file = SPIFFS.open("/style.css", FILE_READ);
@@ -377,7 +358,6 @@ void handleCSS() {
   }
 }
 
-// Liefert die Datei "script.js" aus dem SPIFFS.
 void handleJS() {
   if (SPIFFS.exists("/script.js")) {
     File file = SPIFFS.open("/script.js", FILE_READ);
@@ -388,10 +368,6 @@ void handleJS() {
   }
 }
 
-// ----- API-Endpunkte -----
-
-// Liefert aktuelle Sensorwerte als JSON-String.
-// Enthält Zeit, Druckwerte aller 4 Sensoren, momentanen und kumulativen Durchfluss sowie den Recording-Status.
 void handleSensorwerte() {
   float pressures[4];
   for (uint8_t i = 0; i < 4; i++) {
@@ -418,12 +394,10 @@ void handleSensorwerte() {
   server.send(200, "application/json", json);
 }
 
-// Liefert die aktuelle Systemzeit als einfachen Text.
 void handleGetTime() {
   server.send(200, "text/plain", getTimeString());
 }
 
-// Setzt die Systemzeit. Erwartet einen GET-Parameter "t", der den Zeitstempel enthält.
 void handleSetTime() {
   if (server.hasArg("t")) {
     time_t t = server.arg("t").toInt();
@@ -437,7 +411,6 @@ void handleSetTime() {
   }
 }
 
-// Ermöglicht das Herunterladen der Logdatei (CSV-Format).
 void handleDownloadLog() {
   if (SPIFFS.exists(logFileName)) {
     File file = SPIFFS.open(logFileName, FILE_READ);
@@ -448,13 +421,11 @@ void handleDownloadLog() {
   }
 }
 
-// Schaltet das Recording (Datenlogging) um und liefert eine Bestätigung.
 void handleToggleRecording() {
   recording = !recording;
   server.send(200, "text/plain", recording ? "Recording gestartet" : "Recording gestoppt");
 }
 
-// Löscht die Logdatei aus dem SPIFFS.
 void handleDeleteLog() {
   if (SPIFFS.exists(logFileName)) {
     SPIFFS.remove(logFileName);
@@ -464,47 +435,115 @@ void handleDeleteLog() {
   }
 }
 
-// Setzt den kumulativen Durchfluss zurück (für beide Sensoren).
 void handleClearCumulativeFlow() {
   cumulativeFlow1 = 0;
   cumulativeFlow2 = 0;
   server.send(200, "text/plain", "Kumulativer Durchfluss zurückgesetzt");
 }
 
-// Setzt den Kalibrierungswert für einen Drucksensor.
-// Erwartet GET-Parameter "sensor" (Index 0-3) und "value" (neuer Spannungswert bei 0 PSI).
-void handleSetCalibration() {
-  if (server.hasArg("sensor") && server.hasArg("value")) {
+// Neuer Endpoint zur Aktualisierung der Kalibrierungswerte für einen Drucksensor (manuelle Einstellung)
+void handleUpdateCalibration() {
+  if (server.hasArg("sensor") && server.hasArg("v_min") && server.hasArg("v_max") &&
+      server.hasArg("psi_min") && server.hasArg("psi_max")) {
     int sensorIndex = server.arg("sensor").toInt();
-    float value = server.arg("value").toFloat();
+    float newVmin = server.arg("v_min").toFloat();
+    float newVmax = server.arg("v_max").toFloat();
+    float newPSImin = server.arg("psi_min").toFloat();
+    float newPSImax = server.arg("psi_max").toFloat();
     if (sensorIndex >= 0 && sensorIndex < 4) {
-      sensorZero[sensorIndex] = value;
+      pressureSensor_V_min[sensorIndex] = newVmin;
+      pressureSensor_V_max[sensorIndex] = newVmax;
+      pressureSensor_PSI_min[sensorIndex] = newPSImin;
+      pressureSensor_PSI_max[sensorIndex] = newPSImax;
       saveCalibration();
-      server.send(200, "text/plain", "Kalibrierung für Sensor " + String(sensorIndex + 1) + " aktualisiert");
+      String msg = "Kalibrierung Sensor " + String(sensorIndex + 1) + " aktualisiert: "
+                   "V_min = " + String(newVmin, 3) + " V, V_max = " + String(newVmax, 3) +
+                   " V, PSI_min = " + String(newPSImin, 3) + ", PSI_max = " + String(newPSImax, 3);
+      server.send(200, "text/plain", msg);
       return;
     }
   }
-  server.send(400, "text/plain", "Ungültige Parameter");
+  server.send(400, "text/plain", "Ungültige Parameter.");
 }
 
 /* ====================================================
  * 9. Funktionen zur Kalibrierung und EEPROM-Verwaltung
  * ==================================================== */
-// Lädt die Kalibrierungswerte aus dem EEPROM.
-// Falls ein Wert außerhalb des erwarteten Bereichs (0-5V) liegt, wird der Standardwert 0,5V verwendet.
-void loadCalibration() {
-  for (uint8_t i = 0; i < 4; i++) {
-    EEPROM.get(i * sizeof(float), sensorZero[i]);
-    if (sensorZero[i] < 0.0 || sensorZero[i] > 5.0) {
-      sensorZero[i] = 0.5;
-    }
+// Misst über 5 Sekunden den Mittelwert der Spannung des angegebenen Sensors,
+// speichert diesen in pressureSensor_V_min_cal, aktualisiert pressureSensor_V_min
+// und speichert die Kalibrierwerte im EEPROM.
+float calibrateSensorVmin(uint8_t sensorIndex) {
+  const unsigned long calibrationDuration = 5000; // Kalibrierungsdauer in Millisekunden (5 Sekunden)
+  unsigned long startTime = millis();             // Startzeit der Kalibrierung
+  float voltageSum = 0.0;                         // Summe der gemessenen Spannungen
+  unsigned long sampleCount = 0;                  // Anzahl der Messungen
+
+  // Kalibrierungsschleife: Messungen über 5 Sekunden
+  while (millis() - startTime < calibrationDuration) {
+    int16_t rawValue = ads.readADC_SingleEnded(sensorIndex); // Rohwert vom ADS1115
+    float voltage = rawValue * ADS_VOLTAGE_PER_BIT;          // Umrechnung in Spannung (Volt)
+    voltageSum += voltage;
+    sampleCount++;
+    delay(100); // 100 ms zwischen den Messungen (~50 Messwerte in 5 Sekunden)
   }
+
+  // Berechne den Durchschnittswert der Spannung
+  float avgVoltage = voltageSum / sampleCount;
+
+  // Speichere den ermittelten Kalibrierungswert
+  pressureSensor_V_min_cal[sensorIndex] = avgVoltage;
+  // Aktualisiere den für die Druckberechnung verwendeten v_min-Wert
+  pressureSensor_V_min[sensorIndex] = avgVoltage;
+  // Speichere die neuen Kalibrierungswerte im EEPROM
+  saveCalibration();
+
+  // Rückgabe des kalibrierten Durchschnittswerts
+  return avgVoltage;
 }
 
-// Speichert die aktuellen Kalibrierungswerte im EEPROM.
+// Neuer Handler für den GET-Endpoint /calibrateVmin?sensor=X
+void handleCalibrateVmin() {
+  if (server.hasArg("sensor")) {
+    int sensorIndex = server.arg("sensor").toInt();
+    if (sensorIndex >= 0 && sensorIndex < 4) {
+      float newVmin = calibrateSensorVmin(sensorIndex);
+      String msg = "Kalibrierung Sensor " + String(sensorIndex + 1) + " abgeschlossen: Neuer v_min-Wert = " + String(newVmin, 3) + " V";
+      server.send(200, "text/plain", msg);
+      return;
+    }
+  }
+  server.send(400, "text/plain", "Parameter 'sensor' fehlt oder ungültig");
+}
+
+// Speichert für jeden Sensor vier Float-Werte: V_min, V_max, PSI_min, PSI_max
 void saveCalibration() {
   for (uint8_t i = 0; i < 4; i++) {
-    EEPROM.put(i * sizeof(float), sensorZero[i]);
+    int offset = i * 4 * sizeof(float);
+    EEPROM.put(offset, pressureSensor_V_min[i]);
+    EEPROM.put(offset + sizeof(float), pressureSensor_V_max[i]);
+    EEPROM.put(offset + 2 * sizeof(float), pressureSensor_PSI_min[i]);
+    EEPROM.put(offset + 3 * sizeof(float), pressureSensor_PSI_max[i]);
   }
   EEPROM.commit();
+}
+
+// Lädt für jeden Sensor die vier Float-Werte und validiert sie ggf.
+void loadCalibration() {
+  for (uint8_t i = 0; i < 4; i++) {
+    int offset = i * 4 * sizeof(float);
+    EEPROM.get(offset, pressureSensor_V_min[i]);
+    EEPROM.get(offset + sizeof(float), pressureSensor_V_max[i]);
+    EEPROM.get(offset + 2 * sizeof(float), pressureSensor_PSI_min[i]);
+    EEPROM.get(offset + 3 * sizeof(float), pressureSensor_PSI_max[i]);
+    
+    // Validierung: Falls Werte ungültig (NaN oder außerhalb sinniger Bereiche) sind, Standardwerte setzen.
+    if (isnan(pressureSensor_V_min[i]) || pressureSensor_V_min[i] < 0.0 || pressureSensor_V_min[i] > 5.0)
+      pressureSensor_V_min[i] = 0.5;
+    if (isnan(pressureSensor_V_max[i]) || pressureSensor_V_max[i] < 0.0 || pressureSensor_V_max[i] > 5.0)
+      pressureSensor_V_max[i] = 4.5;
+    if (isnan(pressureSensor_PSI_min[i]) || pressureSensor_PSI_min[i] < 0.0)
+      pressureSensor_PSI_min[i] = 0.0;
+    if (isnan(pressureSensor_PSI_max[i]) || pressureSensor_PSI_max[i] <= 0.0)
+      pressureSensor_PSI_max[i] = 30.0;
+  }
 }

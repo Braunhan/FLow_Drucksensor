@@ -71,3 +71,51 @@ button {
   border-radius: 4px;
   cursor: pointer;
 }
+
+/* Stil für den Kalibrierungsbereich */
+.calibration-section {
+  margin-bottom: 20px;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background: #f9f9f9;
+}
+
+.calibration-section table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.calibration-section th,
+.calibration-section td {
+  padding: 8px;
+  text-align: center;
+  border: 1px solid #ddd;
+}
+
+.calibration-section th {
+  background-color: #e7e7e7;
+}
+
+/* Responsive Optimierung für kleinere Bildschirme */
+@media only screen and (max-width: 600px) {
+  .time-settings {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .set-date {
+    text-align: left;
+    margin-top: 10px;
+  }
+  
+  .calibration-section table,
+  .calibration-section th,
+  .calibration-section td {
+    font-size: 0.8em;
+  }
+  
+  .cards {
+    flex-direction: column;
+  }
+}
