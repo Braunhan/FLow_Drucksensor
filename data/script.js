@@ -57,4 +57,23 @@ function updateData() {
       .then(msg => alert(msg))
       .catch(err => console.error(err));
   }
+  // Funktion, um Datum und Uhrzeit vom Benutzer zu setzen
+function setDate() {
+  const input = document.getElementById('datetimeInput').value;
+  if (!input) {
+    alert("Bitte wähle ein Datum und eine Uhrzeit aus.");
+    return;
+  }
+  // Umwandlung in Unix-Timestamp (in Sekunden)
+  const timestamp = Math.floor(new Date(input).getTime() / 1000);
   
+  // GET-Request an den ESP32-Endpunkt /setTime mit dem Parameter t
+  fetch(`/setTime?t=${timestamp}`)
+    .then(response => response.text())
+    .then(msg => {
+      alert(msg);
+    })
+    .catch(err => {
+      console.error("Fehler beim Setzen der Zeit:", err);
+    });
+}
