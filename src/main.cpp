@@ -121,7 +121,7 @@ void handleUpdateCalibration();                // Aktualisiert die Kalibrierungs
 
 // Neuer Endpoint: Kalibrierung des v_min-Werts über Web-Interface
 void handleCalibrateVmin();
-
+void handleCalibrateHtml();
 /* ====================================================
  * 4. Setup – Initialisierung aller Module
  * ==================================================== */
@@ -176,7 +176,7 @@ void setup() {
   server.on("/updateCalibration", HTTP_GET, handleUpdateCalibration);
   // Neuer Endpoint für die dynamische Kalibrierung von v_min:
   server.on("/calibrateVmin", HTTP_GET, handleCalibrateVmin);
-
+  server.on("/calibrate.html", HTTP_GET, handleCalibrateHtml);
   server.begin();
 
   // ----- Durchflusssensor-Pins konfigurieren -----
@@ -465,7 +465,15 @@ void handleUpdateCalibration() {
   }
   server.send(400, "text/plain", "Ungültige Parameter.");
 }
-
+void handleCalibrateHtml() {
+  if (SPIFFS.exists("/calibrate.html")) {
+    File file = SPIFFS.open("/calibrate.html", FILE_READ);
+    server.streamFile(file, "text/html");
+    file.close();
+  } else {
+    server.send(404, "text/plain", "Datei /calibrate.html nicht gefunden");
+  }
+}
 /* ====================================================
  * 9. Funktionen zur Kalibrierung und EEPROM-Verwaltung
  * ==================================================== */
