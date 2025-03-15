@@ -45,6 +45,19 @@ Adafruit_ADS1115 ads;                          // Objekt für den ADS1115
 #define I2C_SCL 22                            // I²C SCL-Pin (Taktleitung)
 #define ADS_VOLTAGE_PER_BIT 0.000125          // Umrechnungsfaktor: 0.000125 V pro Bit
 
+// ---  In-Memory-Datenpuffer für Messwerte der letzten 10 Minuten ---
+#define BUFFER_SIZE 600  // 600 Einträge = 10 Minuten bei 1 Hz
+
+struct SensorData {
+  time_t timestamp;      // Zeitpunkt der Messung
+  float pressure[4];     // Druckwerte aller 4 Sensoren
+  float flowRate1;       // Durchflusswert Sensor 1
+  float flowRate2;       // Durchflusswert Sensor 2
+};
+
+SensorData dataBuffer[BUFFER_SIZE];  // Puffer für die letzten 10 Minuten
+int bufferIndex = 0;                   // Aktueller Index im Puffer
+
 /* ----- Kalibrierungsvariablen für Drucksensoren -----
    Für jeden der 4 Sensoren werden nun vier Werte verwendet:
      - pressureSensor_V_min: Minimal gemessene Spannung, die 0 bar (0 PSI) entspricht (Standard: 0.5 V)
@@ -118,10 +131,11 @@ void handleToggleRecording();                  // Schaltet das Recording (Datenl
 void handleDeleteLog();                        // Löscht die Logdatei
 void handleClearCumulativeFlow();              // Setzt den kumulativen Durchfluss zurück
 void handleUpdateCalibration();                // Aktualisiert die Kalibrierungswerte für einen Drucksensor
-
-// Neuer Endpoint: Kalibrierung des v_min-Werts über Web-Interface
 void handleCalibrateVmin();
 void handleCalibrateHtml();
+void handleChartsHtml();
+void handleLast10Min();
+void handleFileRead();
 /* ====================================================
  * 4. Setup – Initialisierung aller Module
  * ==================================================== */
@@ -174,9 +188,13 @@ void setup() {
   server.on("/deleteLog", HTTP_GET, handleDeleteLog);
   server.on("/clearCumulativeFlow", HTTP_GET, handleClearCumulativeFlow);
   server.on("/updateCalibration", HTTP_GET, handleUpdateCalibration);
-  // Neuer Endpoint für die dynamische Kalibrierung von v_min:
   server.on("/calibrateVmin", HTTP_GET, handleCalibrateVmin);
   server.on("/calibrate.html", HTTP_GET, handleCalibrateHtml);
+  server.on("/charts.html", HTTP_GET, handleChartsHtml);  
+  server.on("/api/last10min", HTTP_GET, handleLast10Min); // Neu: Endpunkt für Diagrammdaten der letzten 10 Minuten
+  server.onNotFound(handleFileRead);
+
+
   server.begin();
 
   // ----- Durchflusssensor-Pins konfigurieren -----
@@ -233,6 +251,16 @@ void loop() {
     Serial.print(" / Flow2: ");
     Serial.print(flowRate2, 2);
     Serial.println(" L/min");
+
+    // --- Neu: Update des in-memory Puffers für Diagrammdaten ---
+    time_t currentTime = time(nullptr);  // aktuelle Systemzeit
+  dataBuffer[bufferIndex].timestamp = currentTime;
+  for (uint8_t i = 0; i < 4; i++) {
+    dataBuffer[bufferIndex].pressure[i] = pressures[i];  // pressures[] muss vorher definiert sein
+  }
+  dataBuffer[bufferIndex].flowRate1 = flowRate1;
+  dataBuffer[bufferIndex].flowRate2 = flowRate2;
+  bufferIndex = (bufferIndex + 1) % BUFFER_SIZE;  // zyklisches Überschreiben
 
     // ----- c) Datenlogging (Recording) -----
     if (recording) {
@@ -465,6 +493,7 @@ void handleUpdateCalibration() {
   }
   server.send(400, "text/plain", "Ungültige Parameter.");
 }
+// Fügt eine Seite hinzu, auf der die Kalibrierung in einem separaten Layout erfolgt.
 void handleCalibrateHtml() {
   if (SPIFFS.exists("/calibrate.html")) {
     File file = SPIFFS.open("/calibrate.html", FILE_READ);
@@ -474,6 +503,100 @@ void handleCalibrateHtml() {
     server.send(404, "text/plain", "Datei /calibrate.html nicht gefunden");
   }
 }
+// Liefert die Seite, auf der wissenschaftliche Diagramme angezeigt werden.
+void handleChartsHtml() {
+  if (SPIFFS.exists("/charts.html")) {
+    File file = SPIFFS.open("/charts.html", FILE_READ);
+    server.streamFile(file, "text/html");
+    file.close();
+  } else {
+    server.send(404, "text/plain", "Datei /charts.html nicht gefunden");
+  }
+}
+// Diese Funktion liest die Logdatei, filtert alle Zeilen, die innerhalb der letzten 10 Minuten liegen,
+// und erstellt ein JSON-Objekt mit Arrays für Zeitstempel, Druck und Durchfluss.
+// --- Neu/Geändert: API-Endpunkt, der alle Messwerte der letzten 10 Minuten aus dem in-memory Puffer liefert ---
+void handleLast10Min() {
+  time_t now = time(nullptr);
+  time_t tenMinutesAgo = now - 600;  // 600 Sekunden = 10 Minuten
+  
+  String timestampsArr = "";
+  String pressure1Arr = "";
+  String pressure2Arr = "";
+  String pressure3Arr = "";
+  String pressure4Arr = "";
+  String flow1Arr = "";
+  String flow2Arr = "";
+  bool firstElement = true;
+
+  // Durchlaufe den zirkulären Puffer
+  for (int i = 0; i < BUFFER_SIZE; i++) {
+    // Nur Einträge, die gesetzt wurden (timestamp != 0) und innerhalb der letzten 10 Minuten liegen, berücksichtigen
+    if (dataBuffer[i].timestamp != 0 && dataBuffer[i].timestamp >= tenMinutesAgo && dataBuffer[i].timestamp <= now) {
+      if (!firstElement) {
+        timestampsArr += ",";
+        pressure1Arr += ",";
+        pressure2Arr += ",";
+        pressure3Arr += ",";
+        pressure4Arr += ",";
+        flow1Arr += ",";
+        flow2Arr += ",";
+      } else {
+        firstElement = false;
+      }
+      char buf[30];
+      struct tm t;
+      localtime_r(&(dataBuffer[i].timestamp), &t);
+      sprintf(buf, "%04d-%02d-%02d %02d:%02d:%02d", t.tm_year+1900, t.tm_mon+1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec);
+      timestampsArr += "\"" + String(buf) + "\"";
+      pressure1Arr += String(dataBuffer[i].pressure[0], 3);
+      pressure2Arr += String(dataBuffer[i].pressure[1], 3);
+      pressure3Arr += String(dataBuffer[i].pressure[2], 3);
+      pressure4Arr += String(dataBuffer[i].pressure[3], 3);
+      flow1Arr += String(dataBuffer[i].flowRate1, 2);
+      flow2Arr += String(dataBuffer[i].flowRate2, 2);
+    }
+  }
+  
+  String json = "{";
+  json += "\"timestamps\":[" + timestampsArr + "],";
+  json += "\"pressure\":{";
+  json += "\"sensor1\":[" + pressure1Arr + "],";
+  json += "\"sensor2\":[" + pressure2Arr + "],";
+  json += "\"sensor3\":[" + pressure3Arr + "],";
+  json += "\"sensor4\":[" + pressure4Arr + "]";
+  json += "},";
+  json += "\"flow\":{";
+  json += "\"sensor1\":[" + flow1Arr + "],";
+  json += "\"sensor2\":[" + flow2Arr + "]";
+  json += "}";
+  json += "}";
+  server.send(200, "application/json", json);
+}
+
+void handleFileRead() {
+  String path = server.uri(); // z.B. "/chart.umd.min.js"
+  if (SPIFFS.exists(path)) {
+    File file = SPIFFS.open(path, FILE_READ);
+    
+    // MIME-Type bestimmen
+    String contentType = "text/plain";
+    if (path.endsWith(".html"))       contentType = "text/html";
+    else if (path.endsWith(".css"))   contentType = "text/css";
+    else if (path.endsWith(".js"))    contentType = "application/javascript";
+    else if (path.endsWith(".json"))  contentType = "application/json";
+    else if (path.endsWith(".png"))   contentType = "image/png";
+    // usw.
+
+    server.streamFile(file, contentType);
+    file.close();
+  } else {
+    server.send(404, "text/plain", "Datei nicht gefunden");
+  }
+}
+
+
+
 /* ====================================================
  * 9. Funktionen zur Kalibrierung und EEPROM-Verwaltung
  * ==================================================== */

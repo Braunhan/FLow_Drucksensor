@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Diagramme der Messstation</title>
+  <link rel="stylesheet" href="/style.css">
+  <!-- Chart.js via CDN -->
+  <script src="/chart.umd.min.js"></script>
+  <script src="/adapter-datefns.min.js"></script>
+  
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Diagramme der letzten 10 Minuten</h1>
+      <nav>
+        <a href="/index.html"><button>Zurück zur Hauptseite</button></a>
+      </nav>
+    </header>
+    <section>
+      <h2>Drucksensoren</h2>
+      <canvas id="pressureChart"></canvas>
+      <button id="downloadPressure">Diagramm herunterladen</button>
+    </section>
+    <section>
+      <h2>Durchflusssensoren</h2>
+      <canvas id="flowChart"></canvas>
+      <button id="downloadFlow">Diagramm herunterladen</button>
+    </section>
+    <section>
+      <h2>Kombiniert</h2>
+      <canvas id="combinedChart"></canvas>
+      <button id="downloadCombined">Diagramm herunterladen</button>
+    </section>
+  </div>
+  <script src="/charts.js"></script>
+</body>
+</html>
