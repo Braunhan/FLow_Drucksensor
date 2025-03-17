@@ -44,7 +44,12 @@ Adafruit_ADS1115 ads;                          // Objekt für den ADS1115
 #define I2C_SDA 21                            // I²C SDA-Pin (Datenleitung)
 #define I2C_SCL 22                            // I²C SCL-Pin (Taktleitung)
 #define ADS_VOLTAGE_PER_BIT 0.000125          // Umrechnungsfaktor: 0.000125 V pro Bit
-
+// --- deutsches format der float-Zahlen
+String toGermanFloatString(float f, unsigned int decimals = 2) {  // Ändere uint8_t zu unsigned int
+  String s = String(f, decimals);
+  s.replace('.', ',');
+  return s;
+}
 // ---  In-Memory-Datenpuffer für Messwerte der letzten 10 Minuten ---
 #define BUFFER_SIZE 600  // 600 Einträge = 10 Minuten bei 1 Hz
 
@@ -102,6 +107,7 @@ float cumulativeFlow1 = 0.0;                   // Kumulativer Durchfluss Sensor 
 float cumulativeFlow2 = 0.0;                   // Kumulativer Durchfluss Sensor 2 (L)
 
 /* ----- Logging Konfiguration ----- */
+unsigned long startRecordingMillis = 0; 
 bool recording = false;                        // Datenlogging: Ein (true) / Aus (false)
 String logFileName;                            // Dateiname für Logdaten im SPIFFS
 String getFileTimestamp() {
@@ -360,31 +366,39 @@ void logData() {
     return;
   }
 
-  if (file.size() == 0) {
-    String header = "Timestamp,Pressure1 (bar),Pressure2 (bar),Pressure3 (bar),Pressure4 (bar),"
-                    "FlowRate1 (L/min),FlowRate2 (L/min),CumulativeFlow1 (L),CumulativeFlow2 (L)\n";
-    file.print(header);
-  }
-  
-  String timeStr = getTimeString();
+  // Laufzeit in Sekunden seit startRecordingMillis
+  unsigned long sekunden = (millis() - startRecordingMillis) / 1000;
+
+  // Zeitstempel
+  String timeStr = getTimeString(); 
+  // Drucksensoren abfragen
   float pressures[4];
   for (uint8_t i = 0; i < 4; i++) {
     pressures[i] = readPressureSensor(i);
   }
 
-  String line = "";
-  line += timeStr + ",";
+  // Zeile aufbauen – mit Semikolons
+  // Zeit;laufzeit;dr1;dr2;dr3;dr4;flow1;flow2;cumFlow1;cumFlow2
+  String line;
+  line += timeStr + ";";              // z. B. "2023-09-19 15:02:12;"
+  line += String(sekunden) + ";";     // "12;" (Beispiel: 12 s Laufzeit)
+
+  // Drucksensoren in bar => Komma
   for (uint8_t i = 0; i < 4; i++) {
-    line += String(pressures[i], 3) + ",";
+    line += toGermanFloatString(pressures[i], 3) + ";";
   }
-  line += String(flowRate1, 2) + ",";
-  line += String(flowRate2, 2) + ",";
-  line += String(cumulativeFlow1, 2) + ",";
-  line += String(cumulativeFlow2, 2) + "\n";
+  // Flowraten => Komma
+  line += toGermanFloatString(flowRate1, 2) + ";";
+  line += toGermanFloatString(flowRate2, 2) + ";";
+
+  // Kumulierte Flows => Komma
+  line += toGermanFloatString(cumulativeFlow1, 2) + ";";
+  line += toGermanFloatString(cumulativeFlow2, 2) + "\n";
 
   file.print(line);
   file.close();
 }
+
 
 
 
@@ -486,29 +500,32 @@ void handleDownloadLog() {
 }
 
 void handleToggleRecording() {
-  // Umschalten
   recording = !recording;
-  
   if (recording) {
-    // 1) Dateiname erzeugen, z.B. "15-03-2025_12-34_Rohdaten.csv"
+     // Setze den Logging-Puffer-Index zurück, damit alte Daten überschrieben werden.
+     loggingIndex = 0;
+
+    // Laufzeit-Startzeit merken
+    startRecordingMillis = millis();
+    
+    // Neuen Dateinamen anlegen, Header schreiben
     String filePrefix = getFileTimestamp();
     logFileName = "/" + filePrefix + "_Rohdaten.csv";
-
-    // 2) Neue Datei anlegen + Header schreiben
     File file = SPIFFS.open(logFileName, FILE_WRITE);
     if (file) {
-      String header = "Timestamp,Pressure1 (bar),Pressure2 (bar),Pressure3 (bar),Pressure4 (bar),"
-                      "FlowRate1 (L/min),FlowRate2 (L/min),CumulativeFlow1 (L),CumulativeFlow2 (L)\n";
+      // Angepasster Header mit Semikolon
+      //   Zeitstempel;Laufzeit (s);Druck1 (bar);Druck2 (bar);Druck3 (bar);Druck4 (bar);FlowRate1 (L/min);FlowRate2 (L/min);kUmFlow1 (L);kUmFlow2 (L)
+      String header = "Zeitstempel;Laufzeit (s);Pressure1 (bar);Pressure2 (bar);Pressure3 (bar);Pressure4 (bar);"
+                      "FlowRate1 (L/min);FlowRate2 (L/min);CumulativeFlow1 (L);CumulativeFlow2 (L)\n";
       file.print(header);
       file.close();
     } else {
       Serial.println("Fehler beim Erstellen der Logdatei");
     }
   }
-  
-  // Server-Antwort
   server.send(200, "text/plain", recording ? "Recording gestartet" : "Recording gestoppt");
 }
+
 
 
 void handleDeleteLog() {
