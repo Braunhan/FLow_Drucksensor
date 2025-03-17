@@ -125,3 +125,238 @@ button.recording {
   background-color: red;
   color: white;
 }
+/* Eingabefelder */
+.editable-input {
+  width: 80px;
+  padding: 8px;
+  border: 2px solid #3498db;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  background: #f8f9fa;
+}
+
+.editable-input:focus {
+  border-color: #2980b9;
+  outline: none;
+}
+
+/* Mobile Anpassungen */
+@media (max-width: 768px) {
+  .editable-input {
+    width: 70px;
+    padding: 6px;
+  }
+}
+/* style.css - Responsive Kalibrierungsseite */
+
+/* Basis-Styles */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  line-height: 1.6;
+  color: #2c3e50;
+  background-color: #f8f9fa;
+  padding: 1rem;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 15px;
+}
+
+/* Header */
+.page-header {
+  margin-bottom: 2rem;
+  padding: 1rem 0;
+  border-bottom: 2px solid #3498db;
+}
+
+.page-header h1 {
+  font-size: 2rem;
+  color: #2c3e50;
+  margin-bottom: 0.5rem;
+}
+
+/* Tabellen-Container */
+.responsive-table {
+  overflow-x: auto;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 15px rgba(0, 0, 0, 0.1);
+  margin: 1.5rem 0;
+}
+
+/* Sensor-Tabelle */
+.sensor-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 800px;
+}
+
+.sensor-table th,
+.sensor-table td {
+  padding: 1rem;
+  text-align: left;
+  border-bottom: 1px solid #ecf0f1;
+}
+
+.sensor-table th {
+  background-color: #3498db;
+  color: white;
+  font-weight: 500;
+}
+
+.sensor-table tr:nth-child(even) {
+  background-color: #f8f9fa;
+}
+
+/* Eingabefelder */
+.sensor-input {
+  width: 100px;
+  padding: 0.5rem;
+  border: 2px solid #bdc3c7;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  transition: all 0.3s ease;
+}
+
+.sensor-input:focus {
+  border-color: #3498db;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.2rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 500;
+}
+
+.save-btn {
+  background-color: #27ae60;
+  color: white;
+}
+
+.save-btn:hover {
+  background-color: #219a52;
+}
+
+.calibrate-btn {
+  background-color: #2980b9;
+  color: white;
+}
+
+.calibrate-btn:hover {
+  background-color: #2472a4;
+}
+
+.reset-btn {
+  background-color: #e74c3c;
+  color: white;
+}
+
+.reset-btn:hover {
+  background-color: #d62c1a;
+}
+
+.back-btn {
+  background-color: #7f8c8d;
+  color: white;
+}
+
+.reset-all-btn {
+  background-color: #95a5a6;
+  color: white;
+  width: 100%;
+  justify-content: center;
+}
+
+/* Button-Container */
+.action-buttons {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.global-actions {
+  margin-top: 1.5rem;
+}
+
+/* Mobile Optimierungen */
+@media (max-width: 768px) {
+  .page-header h1 {
+    font-size: 1.5rem;
+  }
+
+  .sensor-table th,
+  .sensor-table td {
+    padding: 0.8rem;
+    font-size: 0.9rem;
+  }
+
+  .sensor-input {
+    width: 80px;
+    padding: 0.4rem;
+  }
+
+  .btn {
+    padding: 0.5rem 1rem;
+    font-size: 0.8rem;
+  }
+}
+
+@media (max-width: 480px) {
+  body {
+    padding: 0.5rem;
+  }
+
+  .container {
+    padding: 0 10px;
+  }
+
+  .sensor-table th,
+  .sensor-table td {
+    padding: 0.6rem;
+  }
+}
+
+/* Hilfsklassen */
+.text-center {
+  text-align: center;
+}
+
+.mb-1 { margin-bottom: 0.5rem; }
+.mb-2 { margin-bottom: 1rem; }
+.mb-3 { margin-bottom: 1.5rem; }
+
+/* Fehlermeldungen */
+.error-message {
+  color: #e74c3c;
+  padding: 1rem;
+  background: #f8d7da;
+  border-radius: 6px;
+  margin: 1rem 0;
+}
+
+/* Erfolgsmeldungen */
+.alert-success {
+  color: #155724;
+  background-color: #d4edda;
+  border-color: #c3e6cb;
+  padding: 1rem;
+  border-radius: 6px;
+  margin: 1rem 0;
+}

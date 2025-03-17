@@ -411,3 +411,16 @@ function getFileTimestampJS(){
   const mm=String(now.getMinutes()).padStart(2,'0');
   return `${day}-${month}-${year}_${hh}-${mm}`;
 }
+
+// 12) Reset Kalibrierung
+function resetCalibration() {
+  fetch('/resetCalibration')
+    .then(response => response.text())
+    .then(message => {
+      alert(message);  // Zeige Bestätigungsnachricht an
+      location.reload();  // Seite neu laden, um die aktualisierten Werte anzuzeigen
+    })
+    .catch(error => {
+      console.error('Fehler beim Zurücksetzen der Kalibrierung:', error);
+    });
+}

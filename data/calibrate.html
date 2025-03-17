@@ -1,82 +1,142 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Kalibrierung - Messstation</title>
-  <link rel="stylesheet" href="/style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Sensor Kalibrierung</title>
+    <link rel="stylesheet" href="/style.css">
+    <style>
+        .sensor-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+        }
+
+        .sensor-table th,
+        .sensor-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .sensor-input {
+            width: 80px;
+            padding: 8px;
+            border: 2px solid #3498db;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        @media (max-width: 768px) {
+            .sensor-table th,
+            .sensor-table td {
+                padding: 8px;
+                font-size: 14px;
+            }
+
+            .sensor-input {
+                width: 70px;
+                padding: 6px;
+            }
+        }
+    </style>
 </head>
 <body>
-  <div class="container">
-    <header>
-      <h1>Kalibrierung der Drucksensoren</h1>
-      <!-- Button, um zur Hauptseite zurückzukehren -->
-      <nav>
-        <a href="/index.html"><button>Zurück zur Hauptseite</button></a>
-      </nav>
-    </header>
-    
-    <div class="calibration-section">
-      <table>
-        <tr>
-          <th>Sensor</th>
-          <th>V_min (0 bar)</th>
-          <th>V_max</th>
-          <th>PSI_min</th>
-          <th>PSI_max</th>
-          <th>Aktionen</th>
-        </tr>
-        <tr>
-          <td>Sensor 1</td>
-          <td><input type="number" step="0.01" id="sensor1Vmin" value="0.5"></td>
-          <td><input type="number" step="0.01" id="sensor1Vmax" value="4.5"></td>
-          <td><input type="number" step="0.1" id="sensor1PSImin" value="0"></td>
-          <td><input type="number" step="0.1" id="sensor1PSImax" value="30"></td>
-          <td>
-            <button onclick="updateCalibration(0)">Aktualisieren</button>
-            <button onclick="calibrateVmin(0)">Auto‑Kalibrieren</button>
-          </td>
-        </tr>
-        <tr>
-          <td>Sensor 2</td>
-          <td><input type="number" step="0.01" id="sensor2Vmin" value="0.5"></td>
-          <td><input type="number" step="0.01" id="sensor2Vmax" value="4.5"></td>
-          <td><input type="number" step="0.1" id="sensor2PSImin" value="0"></td>
-          <td><input type="number" step="0.1" id="sensor2PSImax" value="30"></td>
-          <td>
-            <button onclick="updateCalibration(1)">Aktualisieren</button>
-            <button onclick="calibrateVmin(1)">Auto‑Kalibrieren</button>
-          </td>
-        </tr>
-        <tr>
-          <td>Sensor 3</td>
-          <td><input type="number" step="0.01" id="sensor3Vmin" value="0.5"></td>
-          <td><input type="number" step="0.01" id="sensor3Vmax" value="4.5"></td>
-          <td><input type="number" step="0.1" id="sensor3PSImin" value="0"></td>
-          <td><input type="number" step="0.1" id="sensor3PSImax" value="30"></td>
-          <td>
-            <button onclick="updateCalibration(2)">Aktualisieren</button>
-            <button onclick="calibrateVmin(2)">Auto‑Kalibrieren</button>
-          </td>
-        </tr>
-        <tr>
-          <td>Sensor 4</td>
-          <td><input type="number" step="0.01" id="sensor4Vmin" value="0.5"></td>
-          <td><input type="number" step="0.01" id="sensor4Vmax" value="4.5"></td>
-          <td><input type="number" step="0.1" id="sensor4PSImin" value="0"></td>
-          <td><input type="number" step="0.1" id="sensor4PSImax" value="30"></td>
-          <td>
-            <button onclick="updateCalibration(3)">Aktualisieren</button>
-            <button onclick="calibrateVmin(3)">Auto‑Kalibrieren</button>
-          </td>
-        </tr>
-      </table>
+    <div class="container">
+        <header class="page-header">
+            <h1>Sensor Kalibrierung</h1>
+            <nav>
+                <a href="/index.html" class="btn back-btn">
+                    &#8592; Zurück zur Hauptseite
+                </a>
+            </nav>
+        </header>
+
+        <main class="calibration-container">
+            <div class="responsive-table">
+                <table class="sensor-table">
+                    <thead>
+                        <tr>
+                            <th>Sensor</th>
+                            <th>V_min (V)</th>
+                            <th>V_max (V)</th>
+                            <th>PSI_min</th>
+                            <th>PSI_max</th>
+                            <th>Aktionen</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Sensor 1-4 -->
+                        <tr>
+                            <td>#1</td>
+                            <td><input type="number" step="0.01" id="sensor1Vmin" class="sensor-input"></td>
+                            <td><input type="number" step="0.01" id="sensor1Vmax" class="sensor-input"></td>
+                            <td><input type="number" step="0.1" id="sensor1PSImin" class="sensor-input"></td>
+                            <td><input type="number" step="0.1" id="sensor1PSImax" class="sensor-input"></td>
+                            <td>
+                                <div class="action-buttons">
+                                    <button onclick="saveSettings(0)" class="btn save-btn">💾 Speichern</button>
+                                    <button onclick="autoCalibrate(0)" class="btn calibrate-btn">⚙️ Auto-Kalibrieren</button>
+                                    <button onclick="resetSensor(0)" class="btn reset-btn">↺ Reset</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <!-- Wiederholung für Sensor 2-4 -->
+                        <tr>
+                            <td>#2</td>
+                            <td><input type="number" step="0.01" id="sensor2Vmin" class="sensor-input"></td>
+                            <td><input type="number" step="0.01" id="sensor2Vmax" class="sensor-input"></td>
+                            <td><input type="number" step="0.1" id="sensor2PSImin" class="sensor-input"></td>
+                            <td><input type="number" step="0.1" id="sensor2PSImax" class="sensor-input"></td>
+                            <td>
+                                <div class="action-buttons">
+                                    <button onclick="saveSettings(1)" class="btn save-btn">💾 Speichern</button>
+                                    <button onclick="autoCalibrate(1)" class="btn calibrate-btn">⚙️ Auto-Kalibrieren</button>
+                                    <button onclick="resetSensor(1)" class="btn reset-btn">↺ Reset</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>#3</td>
+                            <td><input type="number" step="0.01" id="sensor3Vmin" class="sensor-input"></td>
+                            <td><input type="number" step="0.01" id="sensor3Vmax" class="sensor-input"></td>
+                            <td><input type="number" step="0.1" id="sensor3PSImin" class="sensor-input"></td>
+                            <td><input type="number" step="0.1" id="sensor3PSImax" class="sensor-input"></td>
+                            <td>
+                                <div class="action-buttons">
+                                    <button onclick="saveSettings(2)" class="btn save-btn">💾 Speichern</button>
+                                    <button onclick="autoCalibrate(2)" class="btn calibrate-btn">⚙️ Auto-Kalibrieren</button>
+                                    <button onclick="resetSensor(2)" class="btn reset-btn">↺ Reset</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>#4</td>
+                            <td><input type="number" step="0.01" id="sensor4Vmin" class="sensor-input"></td>
+                            <td><input type="number" step="0.01" id="sensor4Vmax" class="sensor-input"></td>
+                            <td><input type="number" step="0.1" id="sensor4PSImin" class="sensor-input"></td>
+                            <td><input type="number" step="0.1" id="sensor4PSImax" class="sensor-input"></td>
+                            <td>
+                                <div class="action-buttons">
+                                    <button onclick="saveSettings(3)" class="btn save-btn">💾 Speichern</button>
+                                    <button onclick="autoCalibrate(3)" class="btn calibrate-btn">⚙️ Auto-Kalibrieren</button>
+                                    <button onclick="resetSensor(3)" class="btn reset-btn">↺ Reset</button>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </main>
     </div>
-    
-    <div class="controls">
-      <a href="/index.html"><button>Zurück zur Hauptseite</button></a>
-    </div>
-  </div>
-  <script src="/script.js"></script>
+
+    <script src="/calibrate.js"></script>
 </body>
 </html>

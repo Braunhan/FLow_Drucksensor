@@ -27,6 +27,9 @@
 #include <SPIFFS.h>           // SPIFFS (Dateisystem auf dem ESP32)
 #include <time.h>             // Zeitfunktionen (für NTP und Zeitstempel)
 #include <math.h>             // Für isnan()
+#include <ArduinoJson.h>      // JSON-Verarbeitung
+#include <HTTPClient.h>      // HTTP-Client für Anfragen an die API
+#include <Preferences.h>      // Einfache Speicherung von Einstellungen
 
 /* ====================================================
  * 2. Globale Variablen und Konfigurationen
@@ -167,6 +170,9 @@ void handleChartsHtml();                       // Liefert die Charts-Seite
 void handleLast10Min();                        // Neu: Liefert Diagrammdaten der letzten 10 Minuten
 void handleFileRead();                         // Liefert statische Dateien aus SPIFFS
 void handleLoggingData();                      // Liefert die geloggten Daten als JSON
+void handleResetCalibration();                 // Setzt die Kalibrierungswerte zurück
+void handleGetCalibration();                   // Liefert die Kalibrierungswerte als JSON
+void handleResetCalibration();                 // Setzt die Kalibrierungswerte zurück
 /* ====================================================
  * 4. Setup – Initialisierung aller Module
  * ==================================================== */
@@ -177,7 +183,7 @@ void setup() {
 
   // ----- EEPROM initialisieren -----
   // EEPROM-Größe: 4 Sensoren * 4 Float-Werte = 16 Floats
-  EEPROM.begin(16 * sizeof(float));
+  EEPROM.begin(32 * sizeof(float));
   loadCalibration();
 
   // ----- I²C initialisieren -----
@@ -194,7 +200,7 @@ void setup() {
 
   // ----- SPIFFS initialisieren -----
   if (!SPIFFS.begin(true)) {
-    Serial.println("SPIFFS konnte nicht eingebunden werden!");
+    Serial.println("SPIFFS Initialisierung fehlgeschlagen!");
   }
 
   // ----- WLAN im Access Point-Modus konfigurieren -----
@@ -211,20 +217,21 @@ void setup() {
   server.on("/script.js", HTTP_GET, handleJS);
 
   // API-Endpunkte
-  server.on("/api/sensorwerte", HTTP_GET, handleSensorwerte);
-  server.on("/getTime", HTTP_GET, handleGetTime);
-  server.on("/setTime", HTTP_GET, handleSetTime);
-  server.on("/downloadlog", HTTP_GET, handleDownloadLog);
-  server.on("/toggleRecording", HTTP_GET, handleToggleRecording);
-  server.on("/deleteLog", HTTP_GET, handleDeleteLog);
-  server.on("/clearCumulativeFlow", HTTP_GET, handleClearCumulativeFlow);
-  server.on("/updateCalibration", HTTP_GET, handleUpdateCalibration);
-  server.on("/calibrateVmin", HTTP_GET, handleCalibrateVmin);
-  server.on("/calibrate.html", HTTP_GET, handleCalibrateHtml);
-  server.on("/charts.html", HTTP_GET, handleChartsHtml);  
-  server.on("/api/last10min", HTTP_GET, handleLast10Min); // Neu: Endpunkt für Diagrammdaten der letzten 10 Minuten
-  server.on("/api/loggingData", HTTP_GET, handleLoggingData);
-
+  server.on("/api/sensorwerte", HTTP_GET, handleSensorwerte);               // JSON mit aktuellen Sensorwerten
+  server.on("/getTime", HTTP_GET, handleGetTime);                           // Zeitstempel als Text
+  server.on("/setTime", HTTP_GET, handleSetTime);                           // Zeit setzen (Parameter: t)
+  server.on("/downloadlog", HTTP_GET, handleDownloadLog);                   // Logdatei herunterladen
+  server.on("/toggleRecording", HTTP_GET, handleToggleRecording);           // Logging starten/stoppen
+  server.on("/deleteLog", HTTP_GET, handleDeleteLog);                       // Logdatei löschen
+  server.on("/clearCumulativeFlow", HTTP_GET, handleClearCumulativeFlow);   // Kumulativen Durchfluss zurücksetzen
+  server.on("/updateCalibration", HTTP_POST, handleUpdateCalibration);       // Kalibrierungswerte aktualisieren
+  server.on("/calibrateVmin", HTTP_GET, handleCalibrateVmin);               // Minimalen Spannungswert kalibrieren
+  server.on("/calibrate.html", HTTP_GET, handleCalibrateHtml);              // Kalibrierungsseite
+  server.on("/charts.html", HTTP_GET, handleChartsHtml);                    // Charts-Seite
+  server.on("/api/last10min", HTTP_GET, handleLast10Min);                   // Neu: Endpunkt für Diagrammdaten der letzten 10 Minuten
+  server.on("/api/loggingData", HTTP_GET, handleLoggingData);               // Neu: Endpunkt für geloggte Daten
+  server.on("/resetCalibration", HTTP_GET, handleResetCalibration);         // Neu: Endpunkt zum Zurücksetzen der Kalibrierung
+  server.on("/api/calibration", HTTP_GET, handleGetCalibration);            // Neu: Endpunkt für Kalibrierungswerte
   server.onNotFound(handleFileRead);
 
 
@@ -545,28 +552,31 @@ void handleClearCumulativeFlow() {
 
 // Neuer Endpoint zur Aktualisierung der Kalibrierungswerte für einen Drucksensor (manuelle Einstellung)
 void handleUpdateCalibration() {
-  if (server.hasArg("sensor") && server.hasArg("v_min") && server.hasArg("v_max") &&
-      server.hasArg("psi_min") && server.hasArg("psi_max")) {
-    int sensorIndex = server.arg("sensor").toInt();
-    float newVmin = server.arg("v_min").toFloat();
-    float newVmax = server.arg("v_max").toFloat();
-    float newPSImin = server.arg("psi_min").toFloat();
-    float newPSImax = server.arg("psi_max").toFloat();
-    if (sensorIndex >= 0 && sensorIndex < 4) {
-      pressureSensor_V_min[sensorIndex] = newVmin;
-      pressureSensor_V_max[sensorIndex] = newVmax;
-      pressureSensor_PSI_min[sensorIndex] = newPSImin;
-      pressureSensor_PSI_max[sensorIndex] = newPSImax;
+  if (server.hasArg("plain")) {
+    DynamicJsonDocument doc(256);
+    deserializeJson(doc, server.arg("plain"));
+
+    int sensorIndex = doc["sensor"];
+    if(sensorIndex >=0 && sensorIndex <4) {
+      // Temporäre V-Werte
+      pressureSensor_V_min[sensorIndex] = doc["v_min"];
+      pressureSensor_V_max[sensorIndex] = doc["v_max"];
+      
+      // Permanente PSI-Werte
+      pressureSensor_PSI_min[sensorIndex] = doc["psi_min"];
+      pressureSensor_PSI_max[sensorIndex] = doc["psi_max"];
       saveCalibration();
-      String msg = "Kalibrierung Sensor " + String(sensorIndex + 1) + " aktualisiert: "
-                   "V_min = " + String(newVmin, 3) + " V, V_max = " + String(newVmax, 3) +
-                   " V, PSI_min = " + String(newPSImin, 3) + ", PSI_max = " + String(newPSImax, 3);
-      server.send(200, "text/plain", msg);
-      return;
+
+      server.send(200, "application/json", 
+        "{\"status\":\"success\",\"sensor\":"+String(sensorIndex)+"}");
+    } else {
+      server.send(400, "text/plain", "Ungültiger Sensorindex");
     }
+  } else {
+    server.send(400, "text/plain", "Keine Daten empfangen");
   }
-  server.send(400, "text/plain", "Ungültige Parameter.");
 }
+
 // Fügt eine Seite hinzu, auf der die Kalibrierung in einem separaten Layout erfolgt.
 void handleCalibrateHtml() {
   if (SPIFFS.exists("/calibrate.html")) {
@@ -577,6 +587,7 @@ void handleCalibrateHtml() {
     server.send(404, "text/plain", "Datei /calibrate.html nicht gefunden");
   }
 }
+
 // Liefert die Seite, auf der wissenschaftliche Diagramme angezeigt werden.
 void handleChartsHtml() {
   if (SPIFFS.exists("/charts.html")) {
@@ -730,7 +741,31 @@ void handleFileRead() {
   }
 }
 
+// Kalibrierungsdaten abfragen
+void handleGetCalibration() {
+  String json = "[";
+  for (uint8_t i = 0; i < 4; i++) {
+    json += "{";
+    json += "\"v_min\":" + String(pressureSensor_V_min[i], 2) + ",";
+    json += "\"v_max\":" + String(pressureSensor_V_max[i], 2) + ",";
+    json += "\"psi_min\":" + String(pressureSensor_PSI_min[i], 1) + ",";
+    json += "\"psi_max\":" + String(pressureSensor_PSI_max[i], 1);
+    json += "}";
+    if (i < 3) json += ",";
+  }
+  json += "]";
+  server.send(200, "application/json", json);
+}
 
+// Kalibrierung zurücksetzen (aktualisierte Version)
+void handleResetCalibration() {
+  for (uint8_t i = 0; i < 4; i++) {
+    pressureSensor_PSI_min[i] = 0.0;
+    pressureSensor_PSI_max[i] = 10.0;
+  }
+  saveCalibration();
+  server.send(200, "text/plain", "PSI-Werte zurückgesetzt");
+}
 
 /* ====================================================
  * 9. Funktionen zur Kalibrierung und EEPROM-Verwaltung
@@ -739,54 +774,68 @@ void handleFileRead() {
 // speichert diesen in pressureSensor_V_min_cal, aktualisiert pressureSensor_V_min
 // und speichert die Kalibrierwerte im EEPROM.
 float calibrateSensorVmin(uint8_t sensorIndex) {
-  const unsigned long calibrationDuration = 5000; // Kalibrierungsdauer in Millisekunden (5 Sekunden)
-  unsigned long startTime = millis();             // Startzeit der Kalibrierung
-  float voltageSum = 0.0;                         // Summe der gemessenen Spannungen
-  unsigned long sampleCount = 0;                  // Anzahl der Messungen
+  const unsigned long calibrationDuration = 5000; // 5 Sekunden Messung
+  const int sampleRate = 100; // 100 ms zwischen Messungen
+  const int maxSamples = calibrationDuration / sampleRate;
+  float samples[maxSamples];
 
-  // Kalibrierungsschleife: Messungen über 5 Sekunden
-  while (millis() - startTime < calibrationDuration) {
-    int16_t rawValue = ads.readADC_SingleEnded(sensorIndex); // Rohwert vom ADS1115
-    float voltage = rawValue * ADS_VOLTAGE_PER_BIT;          // Umrechnung in Spannung (Volt)
-    voltageSum += voltage;
-    sampleCount++;
-    delay(100); // 100 ms zwischen den Messungen (~50 Messwerte in 5 Sekunden)
+  unsigned long startTime = millis();
+  int sampleCount = 0;
+
+  // Messung durchführen
+  while (millis() - startTime < calibrationDuration && sampleCount < maxSamples) {
+      int16_t rawValue = ads.readADC_SingleEnded(sensorIndex);
+      samples[sampleCount] = rawValue * ADS_VOLTAGE_PER_BIT;
+      sampleCount++;
+      delay(sampleRate);
   }
 
-  // Berechne den Durchschnittswert der Spannung
-  float avgVoltage = voltageSum / sampleCount;
+  // Mindestens 3 Samples benötigt
+  if (sampleCount < 3) {
+      Serial.println("Fehler: Zu wenige Messwerte");
+      return NAN;
+  }
 
-  // Speichere den ermittelten Kalibrierungswert
-  pressureSensor_V_min_cal[sensorIndex] = avgVoltage;
-  // Aktualisiere den für die Druckberechnung verwendeten v_min-Wert
-  pressureSensor_V_min[sensorIndex] = avgVoltage;
-  // Speichere die neuen Kalibrierungswerte im EEPROM
-  saveCalibration();
+  // Sortiere Samples für Median-Berechnung
+  std::sort(samples, samples + sampleCount);
+  
+  // Berechne Median
+  float median = samples[sampleCount / 2];
+  
+  // Aktualisiere nur den temporären V_min-Wert (kein EEPROM-Schreibvorgang!)
+  pressureSensor_V_min[sensorIndex] = median;
 
-  // Rückgabe des kalibrierten Durchschnittswerts
-  return avgVoltage;
+  Serial.printf("Sensor %d: Neuer V_min = %.3f V (temporär, gilt bis zum Neustart)\n", 
+               sensorIndex + 1, median);
+
+  return median;
 }
 
 // Neuer Handler für den GET-Endpoint /calibrateVmin?sensor=X
 void handleCalibrateVmin() {
   if (server.hasArg("sensor")) {
-    int sensorIndex = server.arg("sensor").toInt();
-    if (sensorIndex >= 0 && sensorIndex < 4) {
-      float newVmin = calibrateSensorVmin(sensorIndex);
-      String msg = "Kalibrierung Sensor " + String(sensorIndex + 1) + " abgeschlossen: Neuer v_min-Wert = " + String(newVmin, 3) + " V";
-      server.send(200, "text/plain", msg);
-      return;
-    }
+      int sensorIndex = server.arg("sensor").toInt();
+      if (sensorIndex >= 0 && sensorIndex < 4) {
+          float newVmin = calibrateSensorVmin(sensorIndex);
+          if (!isnan(newVmin)) {
+              String msg = "Temporärer V_min-Wert: " + String(newVmin, 3) + " V\n";
+              msg += "Gilt bis zum Neustart. PSI-Werte bleiben unverändert.";
+              server.send(200, "text/plain", msg);
+          } else {
+              server.send(500, "text/plain", "Kalibrierung fehlgeschlagen");
+          }
+          return;
+      }
   }
-  server.send(400, "text/plain", "Parameter 'sensor' fehlt oder ungültig");
+  server.send(400, "text/plain", "Ungültiger Sensorindex");
 }
 
 // Speichert für jeden Sensor vier Float-Werte: V_min, V_max, PSI_min, PSI_max
 void saveCalibration() {
   for (uint8_t i = 0; i < 4; i++) {
     int offset = i * 4 * sizeof(float);
-    EEPROM.put(offset, pressureSensor_V_min[i]);
-    EEPROM.put(offset + sizeof(float), pressureSensor_V_max[i]);
+    
+    // Speichere nur PSI-Werte
     EEPROM.put(offset + 2 * sizeof(float), pressureSensor_PSI_min[i]);
     EEPROM.put(offset + 3 * sizeof(float), pressureSensor_PSI_max[i]);
   }
@@ -797,19 +846,17 @@ void saveCalibration() {
 void loadCalibration() {
   for (uint8_t i = 0; i < 4; i++) {
     int offset = i * 4 * sizeof(float);
-    EEPROM.get(offset, pressureSensor_V_min[i]);
-    EEPROM.get(offset + sizeof(float), pressureSensor_V_max[i]);
+    
+    // Lade nur PSI-Werte aus EEPROM
     EEPROM.get(offset + 2 * sizeof(float), pressureSensor_PSI_min[i]);
     EEPROM.get(offset + 3 * sizeof(float), pressureSensor_PSI_max[i]);
     
-    // Validierung: Falls Werte ungültig (NaN oder außerhalb sinniger Bereiche) sind, Standardwerte setzen.
-    if (isnan(pressureSensor_V_min[i]) || pressureSensor_V_min[i] < 0.0 || pressureSensor_V_min[i] > 5.0)
-      pressureSensor_V_min[i] = 0.5;
-    if (isnan(pressureSensor_V_max[i]) || pressureSensor_V_max[i] < 0.0 || pressureSensor_V_max[i] > 5.0)
-      pressureSensor_V_max[i] = 4.5;
-    if (isnan(pressureSensor_PSI_min[i]) || pressureSensor_PSI_min[i] < 0.0)
-      pressureSensor_PSI_min[i] = 0.0;
-    if (isnan(pressureSensor_PSI_max[i]) || pressureSensor_PSI_max[i] <= 0.0)
-      pressureSensor_PSI_max[i] = 30.0;
+    // Setze V-Werte immer auf Standard
+    pressureSensor_V_min[i] = 0.5;
+    pressureSensor_V_max[i] = 4.5;
+
+    // Validierung
+    if (isnan(pressureSensor_PSI_min[i])) pressureSensor_PSI_min[i] = 0.0;
+    if (isnan(pressureSensor_PSI_max[i])) pressureSensor_PSI_max[i] = 10.0;
   }
 }
