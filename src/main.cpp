@@ -58,6 +58,19 @@ struct SensorData {
 SensorData dataBuffer[BUFFER_SIZE];  // Puffer für die letzten 10 Minuten
 int bufferIndex = 0;                   // Aktueller Index im Puffer
 
+// ---  In-Memory-Datenpuffer für Messwerte der geloggten Daten ---
+#define LOGGING_BUFFER_SIZE 2000  // z.B. 1000 Einträge für den Logging-Puffer
+
+struct LoggingData {
+  time_t timestamp;
+  float pressure[4];
+  float flow1;
+  float flow2;
+};
+
+LoggingData loggingBuffer[LOGGING_BUFFER_SIZE];
+int loggingIndex = 0;
+
 /* ----- Kalibrierungsvariablen für Drucksensoren -----
    Für jeden der 4 Sensoren werden nun vier Werte verwendet:
      - pressureSensor_V_min: Minimal gemessene Spannung, die 0 bar (0 PSI) entspricht (Standard: 0.5 V)
@@ -90,7 +103,18 @@ float cumulativeFlow2 = 0.0;                   // Kumulativer Durchfluss Sensor 
 
 /* ----- Logging Konfiguration ----- */
 bool recording = false;                        // Datenlogging: Ein (true) / Aus (false)
-const char* logFileName = "/log.csv";          // Dateiname für Logdaten im SPIFFS
+String logFileName;                            // Dateiname für Logdaten im SPIFFS
+String getFileTimestamp() {
+  time_t now = time(nullptr);
+  struct tm timeinfo;
+  localtime_r(&now, &timeinfo);
+  char buf[30];
+  // Format z.B. TT-MM-YYYY_hh-mm
+  sprintf(buf, "%02d-%02d-%04d_%02d-%02d",
+          timeinfo.tm_mday, timeinfo.tm_mon + 1, timeinfo.tm_year + 1900,
+          timeinfo.tm_hour, timeinfo.tm_min);
+  return String(buf);
+}
 
 /* ----- Zeitsteuerung ----- */
 unsigned long previousMillis = 0;              // Hilfsvariable für Zeitmessung in der Loop
@@ -131,11 +155,12 @@ void handleToggleRecording();                  // Schaltet das Recording (Datenl
 void handleDeleteLog();                        // Löscht die Logdatei
 void handleClearCumulativeFlow();              // Setzt den kumulativen Durchfluss zurück
 void handleUpdateCalibration();                // Aktualisiert die Kalibrierungswerte für einen Drucksensor
-void handleCalibrateVmin();
-void handleCalibrateHtml();
-void handleChartsHtml();
-void handleLast10Min();
-void handleFileRead();
+void handleCalibrateVmin();                    // Kalibriert den minimalen Spannungswert für einen Drucksensor
+void handleCalibrateHtml();                    // Liefert die Kalibrierungsseite
+void handleChartsHtml();                       // Liefert die Charts-Seite
+void handleLast10Min();                        // Neu: Liefert Diagrammdaten der letzten 10 Minuten
+void handleFileRead();                         // Liefert statische Dateien aus SPIFFS
+void handleLoggingData();                      // Liefert die geloggten Daten als JSON
 /* ====================================================
  * 4. Setup – Initialisierung aller Module
  * ==================================================== */
@@ -192,6 +217,8 @@ void setup() {
   server.on("/calibrate.html", HTTP_GET, handleCalibrateHtml);
   server.on("/charts.html", HTTP_GET, handleChartsHtml);  
   server.on("/api/last10min", HTTP_GET, handleLast10Min); // Neu: Endpunkt für Diagrammdaten der letzten 10 Minuten
+  server.on("/api/loggingData", HTTP_GET, handleLoggingData);
+
   server.onNotFound(handleFileRead);
 
 
@@ -241,7 +268,7 @@ void loop() {
     cumulativeFlow1 += flowRate1 / 60.0;
     cumulativeFlow2 += flowRate2 / 60.0;
 
-    // Debug-Ausgabe für Flow-Werte
+    // Debug-Ausgabe (optional)
     Serial.print("Puls1: ");
     Serial.print(delta1);
     Serial.print(" / Flow1: ");
@@ -252,30 +279,37 @@ void loop() {
     Serial.print(flowRate2, 2);
     Serial.println(" L/min");
 
-    // --- Neu: Update des in-memory Puffers für Diagrammdaten ---
-    time_t currentTime = time(nullptr);  // aktuelle Systemzeit
-  dataBuffer[bufferIndex].timestamp = currentTime;
-  for (uint8_t i = 0; i < 4; i++) {
-    dataBuffer[bufferIndex].pressure[i] = pressures[i];  // pressures[] muss vorher definiert sein
-  }
-  dataBuffer[bufferIndex].flowRate1 = flowRate1;
-  dataBuffer[bufferIndex].flowRate2 = flowRate2;
-  bufferIndex = (bufferIndex + 1) % BUFFER_SIZE;  // zyklisches Überschreiben
+    // --- 1) 10-Minuten-Puffer (dataBuffer) immer befüllen ---
+    time_t currentTime = time(nullptr);
+    dataBuffer[bufferIndex].timestamp = currentTime;
+    for (uint8_t i = 0; i < 4; i++) {
+      dataBuffer[bufferIndex].pressure[i] = pressures[i];
+    }
+    dataBuffer[bufferIndex].flowRate1 = flowRate1;
+    dataBuffer[bufferIndex].flowRate2 = flowRate2;
+    bufferIndex = (bufferIndex + 1) % BUFFER_SIZE;
 
-    // ----- c) Datenlogging (Recording) -----
+    // --- 2) Wenn recording => loggingBuffer + logData() ---
     if (recording) {
+      // Logging-Puffer befüllen (loggingIndex hochzählen)
+      loggingBuffer[loggingIndex].timestamp = currentTime;
+      for (uint8_t i = 0; i < 4; i++) {
+        loggingBuffer[loggingIndex].pressure[i] = pressures[i];
+      }
+      loggingBuffer[loggingIndex].flow1 = flowRate1;
+      loggingBuffer[loggingIndex].flow2 = flowRate2;
+
+      loggingIndex++;
+      if (loggingIndex >= LOGGING_BUFFER_SIZE) {
+        loggingIndex = 0; // optionaler Ringpuffer
+      }
+
+      // In die CSV-Datei schreiben
       logData();
     }
+  } // Ende if (currentMillis - previousMillis >= interval)
+} // Ende loop()
 
-    // ----- d) Debug-Ausgabe der Druckwerte -----
-    Serial.print("Druck (bar): ");
-    for (uint8_t i = 0; i < 4; i++) {
-      Serial.print(pressures[i], 3);
-      Serial.print("  ");
-    }
-    Serial.println();
-  }
-}
 
 /* ====================================================
  * 6. Interrupt Service Routinen (ISRs)
@@ -331,7 +365,7 @@ void logData() {
                     "FlowRate1 (L/min),FlowRate2 (L/min),CumulativeFlow1 (L),CumulativeFlow2 (L)\n";
     file.print(header);
   }
-
+  
   String timeStr = getTimeString();
   float pressures[4];
   for (uint8_t i = 0; i < 4; i++) {
@@ -351,6 +385,8 @@ void logData() {
   file.print(line);
   file.close();
 }
+
+
 
 String getTimeString() {
   time_t now = time(nullptr);
@@ -450,9 +486,30 @@ void handleDownloadLog() {
 }
 
 void handleToggleRecording() {
+  // Umschalten
   recording = !recording;
+  
+  if (recording) {
+    // 1) Dateiname erzeugen, z.B. "15-03-2025_12-34_Rohdaten.csv"
+    String filePrefix = getFileTimestamp();
+    logFileName = "/" + filePrefix + "_Rohdaten.csv";
+
+    // 2) Neue Datei anlegen + Header schreiben
+    File file = SPIFFS.open(logFileName, FILE_WRITE);
+    if (file) {
+      String header = "Timestamp,Pressure1 (bar),Pressure2 (bar),Pressure3 (bar),Pressure4 (bar),"
+                      "FlowRate1 (L/min),FlowRate2 (L/min),CumulativeFlow1 (L),CumulativeFlow2 (L)\n";
+      file.print(header);
+      file.close();
+    } else {
+      Serial.println("Fehler beim Erstellen der Logdatei");
+    }
+  }
+  
+  // Server-Antwort
   server.send(200, "text/plain", recording ? "Recording gestartet" : "Recording gestoppt");
 }
+
 
 void handleDeleteLog() {
   if (SPIFFS.exists(logFileName)) {
@@ -460,7 +517,7 @@ void handleDeleteLog() {
     server.send(200, "text/plain", "Logdatei gelöscht");
   } else {
     server.send(404, "text/plain", "Logdatei nicht gefunden");
-  }
+  }  
 }
 
 void handleClearCumulativeFlow() {
@@ -571,6 +628,67 @@ void handleLast10Min() {
   json += "\"sensor2\":[" + flow2Arr + "]";
   json += "}";
   json += "}";
+  server.send(200, "application/json", json);
+}
+
+void handleLoggingData() {
+  // Wir gehen davon aus, dass Einträge 0..(loggingIndex-1) gültig sind
+  // (Falls du einen fortlaufenden Ring willst, passt du es an.)
+
+  String timestampsArr;
+  String pressure1Arr, pressure2Arr, pressure3Arr, pressure4Arr;
+  String flow1Arr, flow2Arr;
+  bool firstElement = true;
+
+  for (int i = 0; i < loggingIndex; i++) {
+    if (!firstElement) {
+      timestampsArr += ",";
+      pressure1Arr  += ",";
+      pressure2Arr  += ",";
+      pressure3Arr  += ",";
+      pressure4Arr  += ",";
+      flow1Arr      += ",";
+      flow2Arr      += ",";
+    } else {
+      firstElement = false;
+    }
+
+    // Zeitstempel
+    time_t t = loggingBuffer[i].timestamp;
+    struct tm tmStruct;
+    localtime_r(&t, &tmStruct);
+    char buf[30];
+    sprintf(buf, "%04d-%02d-%02d %02d:%02d:%02d",
+            tmStruct.tm_year+1900, tmStruct.tm_mon+1, tmStruct.tm_mday,
+            tmStruct.tm_hour, tmStruct.tm_min, tmStruct.tm_sec);
+    timestampsArr += "\"" + String(buf) + "\"";
+
+    // Druck
+    pressure1Arr += String(loggingBuffer[i].pressure[0], 3);
+    pressure2Arr += String(loggingBuffer[i].pressure[1], 3);
+    pressure3Arr += String(loggingBuffer[i].pressure[2], 3);
+    pressure4Arr += String(loggingBuffer[i].pressure[3], 3);
+
+    // Flow
+    flow1Arr += String(loggingBuffer[i].flow1, 2);
+    flow2Arr += String(loggingBuffer[i].flow2, 2);
+  }
+
+  // JSON
+  String json = "{";
+  json += "\"timestamps\":[" + timestampsArr + "],";
+  json += "\"pressure\":{";
+  json += "\"sensor1\":[" + pressure1Arr + "],";
+  json += "\"sensor2\":[" + pressure2Arr + "],";
+  json += "\"sensor3\":[" + pressure3Arr + "],";
+  json += "\"sensor4\":[" + pressure4Arr + "]";
+  json += "},";
+  json += "\"flow\":{";
+  json += "\"sensor1\":[" + flow1Arr + "],";
+  json += "\"sensor2\":[" + flow2Arr + "]";
+  json += "}";
+  json += "}";
+
   server.send(200, "application/json", json);
 }
 

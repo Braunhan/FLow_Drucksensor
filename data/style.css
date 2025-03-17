@@ -119,3 +119,9 @@ button {
     flex-direction: column;
   }
 }
+
+/* Styling für den aktiven Recording-Button */
+button.recording {
+  background-color: red;
+  color: white;
+}

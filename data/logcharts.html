@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>Log-Datei-Diagramme</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Chart.js -->
+  <script src="/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <h1>Diagramme einer gespeicherten Logdatei</h1>
+
+  <!-- Buttons zum Herunterladen -->
+  <div>
+    <button id="downloadPressure">Druckdiagramm herunterladen</button>
+    <button id="downloadFlow">Durchflussdiagramm herunterladen</button>
+    <button id="downloadCombined">Kombi-Diagramm herunterladen</button>
+  </div>
+
+  <!-- Drei Canvas-Elemente -->
+  <canvas id="pressureChart" width="400" height="200"></canvas>
+  <canvas id="flowChart" width="400" height="200"></canvas>
+  <canvas id="combinedChart" width="400" height="200"></canvas>
+
+  <!-- Dein JavaScript, s. u. -->
+  <script src="/logcharts.js"></script>
+</body>
+</html>

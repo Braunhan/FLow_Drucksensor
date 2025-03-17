@@ -5,10 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Diagramme der Messstation</title>
   <link rel="stylesheet" href="/style.css">
-  <!-- Chart.js via CDN -->
+  <!-- Lokale Kopien von Chart.js und Adapter (falls benötigt) -->
   <script src="/chart.umd.min.js"></script>
   <script src="/adapter-datefns.min.js"></script>
-  
+  <!-- charts.js wird mit defer geladen, damit der DOM vollständig aufgebaut ist -->
+  <script src="/charts.js" defer></script>
 </head>
 <body>
   <div class="container">
