@@ -66,8 +66,12 @@ async function autoCalibrate(sensorIndex) {
       const response = await fetch(`/calibrateVmin?sensor=${sensorIndex}`);
       const result = await response.json();
       
-      document.getElementById(`sensor${sensorIndex + 1}Vmin`).value = result.v_min.toFixed(2);
-      alert(`V_min kalibriert: ${result.v_min.toFixed(2)} V\nGilt bis zum Neustart!`);
+      if(result.status === "success") {
+          document.getElementById(`sensor${sensorIndex + 1}Vmin`).value = result.v_min.toFixed(2);
+          alert(`V_min kalibriert: ${result.v_min.toFixed(2)} V\nGilt bis zum Neustart!`);
+      } else {
+          throw new Error('Kalibrierung fehlgeschlagen');
+      }
   } catch (error) {
       showError('Kalibrierung fehlgeschlagen:', error);
   }

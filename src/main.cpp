@@ -276,9 +276,9 @@ void loop() {
     lastPulseCount1 = currentPulse1;
     lastPulseCount2 = currentPulse2;
 
-    flowRate1 = delta1 / 98.0;
-    flowRate2 = delta2 / 98.0;
-    cumulativeFlow1 += flowRate1 / 60.0;
+    flowRate1 = delta1 / 11.0;
+    flowRate2 = delta2 / 11.0;
+    cumulativeFlow1 += flowRate1 / 60.0;    //  11.0 für YF-B2; 98.0 für yf-s401; 7.5 für yf-s201;
     cumulativeFlow2 += flowRate2 / 60.0;
 
     // Debug-Ausgabe (optional)
@@ -818,16 +818,15 @@ void handleCalibrateVmin() {
       if (sensorIndex >= 0 && sensorIndex < 4) {
           float newVmin = calibrateSensorVmin(sensorIndex);
           if (!isnan(newVmin)) {
-              String msg = "Temporärer V_min-Wert: " + String(newVmin, 3) + " V\n";
-              msg += "Gilt bis zum Neustart. PSI-Werte bleiben unverändert.";
-              server.send(200, "text/plain", msg);
+              String jsonResponse = "{\"status\":\"success\",\"v_min\":" + String(newVmin, 3) + "}";
+              server.send(200, "application/json", jsonResponse);
           } else {
-              server.send(500, "text/plain", "Kalibrierung fehlgeschlagen");
+              server.send(500, "application/json", "{\"status\":\"error\"}");
           }
           return;
       }
   }
-  server.send(400, "text/plain", "Ungültiger Sensorindex");
+  server.send(400, "application/json", "{\"status\":\"invalid_sensor\"}");
 }
 
 // Speichert für jeden Sensor vier Float-Werte: V_min, V_max, PSI_min, PSI_max
