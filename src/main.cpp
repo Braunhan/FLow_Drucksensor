@@ -603,52 +603,46 @@ void handleChartsHtml() {
 // --- Neu/Geändert: API-Endpunkt, der alle Messwerte der letzten 10 Minuten aus dem in-memory Puffer liefert ---
 void handleLast10Min() {
   time_t now = time(nullptr);
-  time_t tenMinutesAgo = now - 600;  // 10 Minuten in Sekunden
-
+  time_t tenMinutesAgo = now - 600;  // 600 Sekunden = 10 Minuten
+  
   String timestampsArr = "";
-  String pressure1Arr = "", pressure2Arr = "", pressure3Arr = "", pressure4Arr = "";
-  String flow1Arr = "", flow2Arr = "";
+  String pressure1Arr = "";
+  String pressure2Arr = "";
+  String pressure3Arr = "";
+  String pressure4Arr = "";
+  String flow1Arr = "";
+  String flow2Arr = "";
   bool firstElement = true;
 
-  // Iteriere über den Puffer in chronologischer Reihenfolge
+  // Durchlaufe den zirkulären Puffer
   for (int i = 0; i < BUFFER_SIZE; i++) {
-    // Berechne den effektiven Index im Ringpuffer
-    int idx = (bufferIndex + i) % BUFFER_SIZE;
-    
-    // Überspringe nicht initialisierte Einträge
-    if (dataBuffer[idx].timestamp == 0) continue;
-
-    // Prüfe Zeitfenster
-    if (dataBuffer[idx].timestamp >= tenMinutesAgo && dataBuffer[idx].timestamp <= now) {
-      // Trennzeichen für CSV
+    // Nur Einträge, die gesetzt wurden (timestamp != 0) und innerhalb der letzten 10 Minuten liegen, berücksichtigen
+    if (dataBuffer[i].timestamp != 0 && dataBuffer[i].timestamp >= tenMinutesAgo && dataBuffer[i].timestamp <= now) {
       if (!firstElement) {
         timestampsArr += ",";
-        pressure1Arr += ","; pressure2Arr += ","; pressure3Arr += ","; pressure4Arr += ",";
-        flow1Arr += ","; flow2Arr += ",";
+        pressure1Arr += ",";
+        pressure2Arr += ",";
+        pressure3Arr += ",";
+        pressure4Arr += ",";
+        flow1Arr += ",";
+        flow2Arr += ",";
       } else {
         firstElement = false;
       }
-
-      // Zeitstempel formatieren
-      struct tm t;
-      localtime_r(&(dataBuffer[idx].timestamp), &t);
       char buf[30];
-      sprintf(buf, "%04d-%02d-%02d %02d:%02d:%02d",
-              t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
-              t.tm_hour, t.tm_min, t.tm_sec);
-      
-      // Werte anhängen
+      struct tm t;
+      localtime_r(&(dataBuffer[i].timestamp), &t);
+      sprintf(buf, "%04d-%02d-%02d %02d:%02d:%02d", t.tm_year+1900, t.tm_mon+1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec);
       timestampsArr += "\"" + String(buf) + "\"";
-      pressure1Arr += String(dataBuffer[idx].pressure[0], 3);
-      pressure2Arr += String(dataBuffer[idx].pressure[1], 3);
-      pressure3Arr += String(dataBuffer[idx].pressure[2], 3);
-      pressure4Arr += String(dataBuffer[idx].pressure[3], 3);
-      flow1Arr += String(dataBuffer[idx].flowRate1, 2);
-      flow2Arr += String(dataBuffer[idx].flowRate2, 2);
+      pressure1Arr += String(dataBuffer[i].pressure[0], 3);
+      pressure2Arr += String(dataBuffer[i].pressure[1], 3);
+      pressure3Arr += String(dataBuffer[i].pressure[2], 3);
+      pressure4Arr += String(dataBuffer[i].pressure[3], 3);
+      flow1Arr += String(dataBuffer[i].flowRate1, 2);
+      flow2Arr += String(dataBuffer[i].flowRate2, 2);
     }
   }
-
-  // JSON zusammenbauen
+  
   String json = "{";
   json += "\"timestamps\":[" + timestampsArr + "],";
   json += "\"pressure\":{";
@@ -660,10 +654,11 @@ void handleLast10Min() {
   json += "\"flow\":{";
   json += "\"sensor1\":[" + flow1Arr + "],";
   json += "\"sensor2\":[" + flow2Arr + "]";
-  json += "}}";
-
+  json += "}";
+  json += "}";
   server.send(200, "application/json", json);
 }
+
 void handleLoggingData() {
   // Wir gehen davon aus, dass Einträge 0..(loggingIndex-1) gültig sind
   // (Falls du einen fortlaufenden Ring willst, passt du es an.)
