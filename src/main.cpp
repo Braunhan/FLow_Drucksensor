@@ -28,8 +28,9 @@
 #include <time.h>             // Zeitfunktionen (für NTP und Zeitstempel)
 #include <math.h>             // Für isnan()
 #include <ArduinoJson.h>      // JSON-Verarbeitung
-#include <HTTPClient.h>      // HTTP-Client für Anfragen an die API
+#include <HTTPClient.h>       // HTTP-Client für Anfragen an die API
 #include <Preferences.h>      // Einfache Speicherung von Einstellungen
+bool timeSet = false;         // Variable, um zu überprüfen, ob die Zeit gesetzt wurde
 
 /* ====================================================
  * 2. Globale Variablen und Konfigurationen
@@ -484,17 +485,29 @@ void handleGetTime() {
 }
 
 void handleSetTime() {
+  if (timeSet) {
+    server.send(200, "text/plain", "Zeit wurde bereits gesetzt");
+    return;
+  }
   if (server.hasArg("t")) {
     time_t t = server.arg("t").toInt();
     struct timeval tv;
     tv.tv_sec = t;
     tv.tv_usec = 0;
     settimeofday(&tv, NULL);
+    
+    // Festlegung der Zeitzone für Berlin inklusive Sommer-/Winterzeit:
+    // CET ist UTC+1 im Winter, CEST UTC+2 im Sommer.
+    setenv("TZ", "CET-1CEST,M3.5.0/2,M10.5.0/3", 1);
+    tzset();
+    
+    timeSet = true;  // Flag setzen – weitere Zeit-Updates werden ignoriert
     server.send(200, "text/plain", "Zeit aktualisiert");
   } else {
     server.send(400, "text/plain", "Fehlender Parameter 't'");
   }
 }
+
 
 void handleDownloadLog() {
   if (SPIFFS.exists(logFileName)) {

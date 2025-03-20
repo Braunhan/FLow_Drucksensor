@@ -9,6 +9,24 @@
   <!-- Lokale Kopien der Bibliotheken aus dem SPIFFS (data-Ordner) -->
   <script src="jszip.min.js"></script>
   <script src="filesaver.min.js"></script>
+  <!-- Zeit-Synchronisation: Beim Laden wird die lokale Zeit (vom PC/Smartphone) an den ESP32 gesendet -->
+  <script>
+    window.onload = function() {
+      var clientTime = Math.floor(new Date().getTime() / 1000);
+      var xhr = new XMLHttpRequest();
+      xhr.onreadystatechange = function() {
+        if (xhr.readyState === 4 && xhr.status === 200) {
+          // Falls der ESP32 die Zeit übernommen hat, wird "Zeit aktualisiert" zurückgegeben.
+          // In diesem Fall erfolgt ein einmaliger Reload, damit alle Zeitanzeigen aktualisiert werden.
+          if (xhr.responseText === "Zeit aktualisiert") {
+            location.reload();
+          }
+        }
+      };
+      xhr.open("GET", "/setTime?t=" + clientTime, true);
+      xhr.send();
+    };
+  </script>
 </head>
 <body>
   <div class="container">
