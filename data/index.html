@@ -4,19 +4,19 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Messstation: Druck &amp; Durchfluss</title>
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="style.css">
   
   <!-- Lokale Kopien der Bibliotheken aus dem SPIFFS (data-Ordner) -->
-  <script src="/jszip.min.js"></script>
-  <script src="/filesaver.min.js"></script>
+  <script src="jszip.min.js"></script>
+  <script src="filesaver.min.js"></script>
 </head>
 <body>
   <div class="container">
     <header>
       <h1>Messstation: Druck &amp; Durchfluss</h1>
       <nav>
-        <a href="/calibrate.html"><button>Kalibrierung</button></a>
-        <a href="/charts.html"><button>10-Min-Charts</button></a>
+        <a href="calibrate.html"><button>Kalibrierung</button></a>
+        <a href="charts.html"><button>10-Min-Charts</button></a>
       </nav>
     </header>
     
@@ -43,28 +43,26 @@
     
     <div class="controls">
       <button id="toggleRecordingBtn" onclick="toggleRecording()">Recording starten</button>
-      <!-- Wenn du Log herunterladen / löschen nicht brauchst, weglassen -->
-      <!-- <button onclick="downloadLog()">Log herunterladen</button>
-      <button onclick="deleteLog()">Log löschen</button> -->
+      <!-- Alle Daten herunterladen inkl. CSV und Diagrammen in hoher Auflösung -->
       <button onclick="downloadAllData()">Alle Daten herunterladen</button>
     </div>
     
     <h2>Diagramme</h2>
     <div style="margin:1em 0;">
-      <canvas id="pressureChart" width="600" height="300"></canvas>
+      <canvas id="pressureChart" style="width: 100%; height: 350px;"></canvas>
     </div>
     <div style="margin:1em 0;">
-      <canvas id="flowChart" width="600" height="300"></canvas>
+      <canvas id="flowChart" style="width: 100%; height: 350px;"></canvas>
     </div>
     <div style="margin:1em 0;">
-      <canvas id="combinedChart" width="600" height="300"></canvas>
+      <canvas id="combinedChart" style="width: 100%; height: 350px;"></canvas>
     </div>
   </div>
 
-  <!-- Chart.js (z. B. chart.umd.min.js im SPIFFS) -->
-  <script src="/chart.umd.min.js"></script>
+  <!-- Chart.js (z.B. chart.umd.min.js aus dem SPIFFS) -->
+  <script src="chart.umd.min.js"></script>
   
-  <!-- Dein Skript -->
-  <script src="/script.js"></script>
+  <!-- Dein Haupt-JavaScript (script.js) -->
+  <script src="script.js"></script>
 </body>
 </html>

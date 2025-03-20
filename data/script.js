@@ -2,10 +2,10 @@
 // Check JSZip / FileSaver
 // ------------------------------------
 if (typeof JSZip === "undefined") {
-  console.warn("JSZip ist nicht geladen. Bitte überprüfe /jszip.min.js!");
+  console.warn("JSZip ist nicht geladen. Bitte überprüfe jszip.min.js!");
 }
 if (typeof saveAs === "undefined") {
-  console.warn("FileSaver ist nicht geladen. Bitte überprüfe /filesaver.min.js!");
+  console.warn("FileSaver ist nicht geladen. Bitte überprüfe filesaver.min.js!");
 }
 
 // ------------------------------------
@@ -31,7 +31,7 @@ const flowColors = {
 // 1) Beim Laden der Seite:
 //    - Periodische Text-Updates
 //    - Diagramme erstellen
-//    - Regelmäßig /api/loggingData abrufen -> Diagramme
+//    - Regelmäßig /api/loggingData abrufen -> Diagramme aktualisieren
 // ------------------------------------
 document.addEventListener('DOMContentLoaded', () => {
   // a) Text-Updates (Sensorwerte) alle 1 Sekunde
@@ -45,7 +45,6 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(updateLoggingCharts, 1000);
 
   // d) Buttons zum PNG-Download der Diagramme
-  //    (Falls in index.html vorhanden)
   const dlPressureBtn = document.getElementById('downloadPressure');
   if (dlPressureBtn) {
     dlPressureBtn.addEventListener('click', () => {
@@ -98,14 +97,14 @@ function updateData() {
 //    Initialisierung + Update
 // ------------------------------------
 function initLoggingCharts() {
-  // a) Druckdiagramm
+  // a) Druckdiagramm erstellen
   {
     const ctx = document.getElementById('pressureChart').getContext('2d');
     const datasets = [];
     for (let i = 1; i <= 4; i++) {
       datasets.push({
         label: `Sensor ${i}`,
-        data: [], // noch leer
+        data: [],
         borderColor: pressureColors[`sensor${i}`],
         backgroundColor: pressureColors[`sensor${i}`],
         fill: false,
@@ -119,12 +118,22 @@ function initLoggingCharts() {
         datasets: datasets
       },
       options: {
-        responsive: true
+        responsive: true,
+        scales: {
+          x: {
+            type: 'category',
+            title: { display: true, text: 'Datum und Uhrzeit' },
+            ticks: { autoSkip: true, maxTicksLimit: 10 }
+          },
+          y: {
+            title: { display: true, text: 'Druck (bar)' }
+          }
+        }
       }
     });
   }
 
-  // b) Flowdiagramm
+  // b) Flowdiagramm erstellen
   {
     const ctx = document.getElementById('flowChart').getContext('2d');
     const datasets = [];
@@ -145,19 +154,29 @@ function initLoggingCharts() {
         datasets: datasets
       },
       options: {
-        responsive: true
+        responsive: true,
+        scales: {
+          x: {
+            type: 'category',
+            title: { display: true, text: 'Datum und Uhrzeit' },
+            ticks: { autoSkip: true, maxTicksLimit: 10 }
+          },
+          y: {
+            title: { display: true, text: 'Durchfluss (L/min)' }
+          }
+        }
       }
     });
   }
 
-  // c) Kombi-Diagramm (Druck + Flow)
+  // c) Kombiniertes Diagramm (Druck + Flow) – unverändert, da hier die Achsentitel bereits gesetzt sind
   {
     const ctx = document.getElementById('combinedChart').getContext('2d');
     const datasets = [];
-    // 4 Druck -> linker Y
+    // Drucksensoren auf linker Y-Achse
     for (let i = 1; i <= 4; i++) {
       datasets.push({
-        label: `Pressure ${i}`,
+        label: `Pressure Sensor ${i}`,
         data: [],
         borderColor: pressureColors[`sensor${i}`],
         backgroundColor: pressureColors[`sensor${i}`],
@@ -166,10 +185,10 @@ function initLoggingCharts() {
         yAxisID: 'yPressure'
       });
     }
-    // 2 Flow -> rechter Y
+    // Durchflusssensoren auf rechter Y-Achse
     for (let i = 1; i <= 2; i++) {
       datasets.push({
-        label: `Flow ${i}`,
+        label: `Flow Sensor ${i}`,
         data: [],
         borderColor: flowColors[`sensor${i}`],
         backgroundColor: flowColors[`sensor${i}`],
@@ -187,6 +206,11 @@ function initLoggingCharts() {
       options: {
         responsive: true,
         scales: {
+          x: {
+            type: 'category',
+            title: { display: true, text: 'Datum und Uhrzeit' },
+            ticks: { autoSkip: true, maxTicksLimit: 10 }
+          },
           yPressure: {
             type: 'linear',
             position: 'left',
@@ -204,23 +228,18 @@ function initLoggingCharts() {
   }
 }
 
-// Diese Funktion holt /api/loggingData
-// und aktualisiert die Diagramme
+
+// Diese Funktion holt /api/loggingData und aktualisiert die Diagramme
 function updateLoggingCharts() {
   fetch('/api/loggingData')
     .then(r => {
       if (!r.ok) {
-        // z.B. 404 -> wirft Fehler
         throw new Error("HTTP " + r.status + " - " + r.statusText);
       }
       return r.json();
     })
     .then(data => {
-      // data: { "timestamps": [...],
-      //         "pressure": { "sensor1": [...], ... },
-      //         "flow": { "sensor1": [...], "sensor2": [...] } }
-
-      // Druckdiagramm
+      // Druckdiagramm aktualisieren
       if (pressureChartInstance) {
         pressureChartInstance.data.labels = data.timestamps;
         pressureChartInstance.data.datasets.forEach((ds, idx) => {
@@ -228,8 +247,7 @@ function updateLoggingCharts() {
         });
         pressureChartInstance.update();
       }
-
-      // Flowdiagramm
+      // Flowdiagramm aktualisieren
       if (flowChartInstance) {
         flowChartInstance.data.labels = data.timestamps;
         flowChartInstance.data.datasets.forEach((ds, idx) => {
@@ -237,13 +255,12 @@ function updateLoggingCharts() {
         });
         flowChartInstance.update();
       }
-
-      // Kombi-Diagramm
+      // Kombi-Diagramm aktualisieren
       if (combinedChartInstance) {
         combinedChartInstance.data.labels = data.timestamps;
         combinedChartInstance.data.datasets.forEach(ds => {
           if (ds.label.includes("Pressure")) {
-            const sn = ds.label.match(/\d+/)[0]; // "1", "2", ...
+            const sn = ds.label.match(/\d+/)[0];
             ds.data = data.pressure[`sensor${sn}`];
           } else if (ds.label.includes("Flow")) {
             const sn = ds.label.match(/\d+/)[0];
@@ -257,12 +274,12 @@ function updateLoggingCharts() {
 }
 
 // ------------------------------------
-// PNG-Download je Canvas
+// PNG-Download je Canvas (so wie aktuell, ohne Skalierung)
 // ------------------------------------
 function downloadChart(canvasId, filename) {
   const canvas = document.getElementById(canvasId);
-  if(!canvas){
-    console.warn("Canvas-Element nicht gefunden: "+canvasId);
+  if (!canvas) {
+    console.warn("Canvas-Element nicht gefunden: " + canvasId);
     return;
   }
   const link = document.createElement('a');
@@ -299,31 +316,31 @@ function downloadLog() {
 // 6) Logdatei löschen
 function deleteLog() {
   fetch('/deleteLog')
-    .then(r=>r.text())
-    .then(msg=>alert(msg))
-    .catch(err=>console.error(err));
+    .then(r => r.text())
+    .then(msg => alert(msg))
+    .catch(err => console.error(err));
 }
 
 // 7) Kumulativen Durchfluss reset
 function clearFlow() {
   fetch('/clearCumulativeFlow')
-    .then(r=>r.text())
-    .then(msg=>alert(msg))
-    .catch(err=>console.error(err));
+    .then(r => r.text())
+    .then(msg => alert(msg))
+    .catch(err => console.error(err));
 }
 
 // 8) Zeit setzen
 function setDate() {
   const input = document.getElementById('datetimeInput').value;
-  if(!input){
+  if (!input) {
     alert("Bitte wähle ein Datum und eine Uhrzeit.");
     return;
   }
-  const timestamp = Math.floor(new Date(input).getTime()/1000);
+  const timestamp = Math.floor(new Date(input).getTime() / 1000);
   fetch(`/setTime?t=${timestamp}`)
-    .then(r=>r.text())
-    .then(msg=>alert(msg))
-    .catch(err=>console.error(err));
+    .then(r => r.text())
+    .then(msg => alert(msg))
+    .catch(err => console.error(err));
 }
 
 // 9) updateCalibration
@@ -333,16 +350,16 @@ function updateCalibration(sensorIndex) {
   let psiMin = document.getElementById("sensor" + (sensorIndex + 1) + "PSImin").value;
   let psiMax = document.getElementById("sensor" + (sensorIndex + 1) + "PSImax").value;
   fetch(`/updateCalibration?sensor=${sensorIndex}&v_min=${vMin}&v_max=${vMax}&psi_min=${psiMin}&psi_max=${psiMax}`)
-    .then(r=>r.text())
-    .then(msg=>alert(msg))
-    .catch(err=>console.error(err));
+    .then(r => r.text())
+    .then(msg => alert(msg))
+    .catch(err => console.error(err));
 }
 
 // 10) calibrateVmin
 function calibrateVmin(sensorIndex) {
   fetch(`/calibrateVmin?sensor=${sensorIndex}`)
-    .then(r=>r.text())
-    .then(msg=> {
+    .then(r => r.text())
+    .then(msg => {
       alert(msg);
       const regex = /Neuer v_min-Wert = ([0-9.]+) V/;
       const match = msg.match(regex);
@@ -350,11 +367,14 @@ function calibrateVmin(sensorIndex) {
         document.getElementById("sensor" + (sensorIndex + 1) + "Vmin").value = parseFloat(match[1]);
       }
     })
-    .catch(err=>console.error(err));
+    .catch(err => console.error(err));
 }
 
-// 11) CSV + Diagramme -> ZIP
+// ------------------------------------
+// 11) CSV + Diagramme -> ZIP (überarbeitete Version)
+// ------------------------------------
 async function downloadAllData() {
+  // 1) Check, ob FileSaver und JSZip geladen sind
   if (typeof saveAs === "undefined") {
     alert("FileSaver ist nicht geladen.");
     return;
@@ -363,62 +383,85 @@ async function downloadAllData() {
     alert("JSZip ist nicht geladen.");
     return;
   }
+
   const zip = new JSZip();
   const timestamp = getFileTimestampJS();
-  
-  // a) CSV
+
+  // a) CSV laden und ins ZIP packen
   try {
     const csvResp = await fetch('/downloadlog');
-    if(!csvResp.ok) throw new Error("CSV (HTTP "+csvResp.status+")");
+    if (!csvResp.ok) throw new Error("CSV (HTTP " + csvResp.status + ")");
     const csvText = await csvResp.text();
-    zip.file(timestamp+"_Rohdaten.csv", csvText);
-  } catch(e) {
+    zip.file(timestamp + "_Rohdaten.csv", csvText);
+  } catch (e) {
     console.error("Fehler beim CSV:", e);
     alert("Fehler beim Laden der CSV");
     return;
   }
 
-  // b) Canvas -> PNG
-  function getCanvasAsBase64(id){
-    const c=document.getElementById(id);
-    if(!c)return null;
-    return c.toDataURL("image/png").split(",")[1];
-  }
-  const pData = getCanvasAsBase64("pressureChart");
-  if(pData) zip.file(timestamp+"_Druck.png", pData, {base64:true});
-  const fData = getCanvasAsBase64("flowChart");
-  if(fData) zip.file(timestamp+"_Flow.png", fData, {base64:true});
-  const cData = getCanvasAsBase64("combinedChart");
-  if(cData) zip.file(timestamp+"_Kombiniert.png", cData, {base64:true});
+  // b) Funktion, die ein Off-Screen-Canvas erstellt, skaliert den Inhalt und einen weißen Hintergrund setzt.
+  function getHighResCanvasAsBase64(canvasId, scaleFactor = 4) {
+    const originalCanvas = document.getElementById(canvasId);
+    if (!originalCanvas) {
+      console.warn("Canvas nicht gefunden: " + canvasId);
+      return null;
+    }
+    const offScreenCanvas = document.createElement('canvas');
+    offScreenCanvas.width = originalCanvas.width * scaleFactor;
+    offScreenCanvas.height = originalCanvas.height * scaleFactor;
+    const ctx = offScreenCanvas.getContext('2d');
 
-  // c) ZIP generieren
+    // Weißer Hintergrund
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, offScreenCanvas.width, offScreenCanvas.height);
+
+    // Skalieren und Original-Canvas zeichnen
+    ctx.scale(scaleFactor, scaleFactor);
+    ctx.drawImage(originalCanvas, 0, 0);
+
+    return offScreenCanvas.toDataURL("image/png").split(",")[1];
+  }
+
+  // c) Diagramme exportieren: Für jeden Chart ein Bild in höherer Auflösung erzeugen
+  const pData = getHighResCanvasAsBase64("pressureChart", 4);
+  if (pData) zip.file(timestamp + "_Druck.png", pData, { base64: true });
+  const fData = getHighResCanvasAsBase64("flowChart", 4);
+  if (fData) zip.file(timestamp + "_Flow.png", fData, { base64: true });
+  const cData = getHighResCanvasAsBase64("combinedChart", 4);
+  if (cData) zip.file(timestamp + "_Kombiniert.png", cData, { base64: true });
+
+  // d) ZIP generieren und herunterladen
   try {
-    const blob=await zip.generateAsync({type:"blob"});
-    saveAs(blob, timestamp+"_Log_Diagramme.zip");
-  } catch(err) {
+    const blob = await zip.generateAsync({ type: "blob" });
+    saveAs(blob, timestamp + "_Log_Diagramme.zip");
+  } catch (err) {
     console.error("Fehler beim ZIP:", err);
     alert("Fehler beim Erstellen der ZIP-Datei");
   }
 }
 
-// Hilfsfunktion Dateiname
+// ------------------------------------
+// Hilfsfunktion: Erzeugt einen Dateinamen basierend auf dem aktuellen Datum und der Uhrzeit
+// ------------------------------------
 function getFileTimestampJS(){
-  const now=new Date();
-  const day=String(now.getDate()).padStart(2,'0');
-  const month=String(now.getMonth()+1).padStart(2,'0');
-  const year=now.getFullYear();
-  const hh=String(now.getHours()).padStart(2,'0');
-  const mm=String(now.getMinutes()).padStart(2,'0');
+  const now = new Date();
+  const day = String(now.getDate()).padStart(2, '0');
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const year = now.getFullYear();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
   return `${day}-${month}-${year}_${hh}-${mm}`;
 }
 
+// ------------------------------------
 // 12) Reset Kalibrierung
+// ------------------------------------
 function resetCalibration() {
   fetch('/resetCalibration')
     .then(response => response.text())
     .then(message => {
-      alert(message);  // Zeige Bestätigungsnachricht an
-      location.reload();  // Seite neu laden, um die aktualisierten Werte anzuzeigen
+      alert(message);
+      location.reload();
     })
     .catch(error => {
       console.error('Fehler beim Zurücksetzen der Kalibrierung:', error);

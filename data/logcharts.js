@@ -32,22 +32,18 @@ document.addEventListener('DOMContentLoaded', () => {
       createPressureChart(data);
       createFlowChart(data);
       createCombinedChart(data);
-      
-      // Wenn du willst, kannst du hier KEIN periodisches updateCharts() machen,
-      // weil es eine fixe Logdatei ist (keine Echtzeit).
-      // Man könnte aber manuell "updateLogCharts()" erlauben, falls man neu einlesen will.
     })
     .catch(error => console.error("Fehler beim Laden der Logdaten:", error));
 
-  // 3) Download-Buttons
+  // 3) Download-Buttons (verwenden den High-Res-Download)
   document.getElementById('downloadPressure').addEventListener('click', () => {
-    downloadChart('pressureChart', 'pressure_chart.png');
+    downloadHighResChart('pressureChart', 'pressure_chart.png', 4);
   });
   document.getElementById('downloadFlow').addEventListener('click', () => {
-    downloadChart('flowChart', 'flow_chart.png');
+    downloadHighResChart('flowChart', 'flow_chart.png', 4);
   });
   document.getElementById('downloadCombined').addEventListener('click', () => {
-    downloadChart('combinedChart', 'combined_chart.png');
+    downloadHighResChart('combinedChart', 'combined_chart.png', 4);
   });
 });
 
@@ -74,16 +70,24 @@ function createPressureChart(data) {
     },
     options: {
       responsive: true,
+      maintainAspectRatio: true,
+      aspectRatio: 1.5, // 3:2 Format (Breite : Höhe)
       scales: {
         x: {
-          type: 'category', // da Zeitstempel in data.timestamps evtl. nur Strings sind
-          title: { display: true, text: 'Zeit' }
+          type: 'category',
+          title: { display: true, text: 'Datum und Uhrzeit' },
+          ticks: {
+            autoSkip: true,
+            maxTicksLimit: 10
+          }
         },
         y: {
           title: { display: true, text: 'Druck (bar)' }
         }
       },
-      plugins: { legend: { display: true } }
+      plugins: { 
+        legend: { display: true, position: 'top' }
+      }
     }
   });
 }
@@ -111,25 +115,33 @@ function createFlowChart(data) {
     },
     options: {
       responsive: true,
+      maintainAspectRatio: true,
+      aspectRatio: 1.5,
       scales: {
         x: {
           type: 'category',
-          title: { display: true, text: 'Zeit' }
+          title: { display: true, text: 'Datum und Uhrzeit' },
+          ticks: {
+            autoSkip: true,
+            maxTicksLimit: 10
+          }
         },
         y: {
           title: { display: true, text: 'Durchfluss (L/min)' }
         }
       },
-      plugins: { legend: { display: true } }
+      plugins: { 
+        legend: { display: true, position: 'top' }
+      }
     }
   });
 }
 
-// Kombiniertes Diagramm (Druck + Durchfluss)
+// Kombiniertes Diagramm (Druck + Durchfluss) erstellen
 function createCombinedChart(data) {
   const ctx = document.getElementById('combinedChart').getContext('2d');
   const datasets = [];
-
+  
   // Drucksensoren auf linker Y-Achse
   for (let i = 1; i <= 4; i++) {
     datasets.push({
@@ -163,10 +175,16 @@ function createCombinedChart(data) {
     },
     options: {
       responsive: true,
+      maintainAspectRatio: true,
+      aspectRatio: 1.5,
       scales: {
         x: {
           type: 'category',
-          title: { display: true, text: 'Zeit' }
+          title: { display: true, text: 'Datum und Uhrzeit' },
+          ticks: {
+            autoSkip: true,
+            maxTicksLimit: 10
+          }
         },
         yPressure: {
           type: 'linear',
@@ -180,16 +198,48 @@ function createCombinedChart(data) {
           grid: { drawOnChartArea: false }
         }
       },
-      plugins: { legend: { display: true } }
+      plugins: { 
+        legend: { display: true, position: 'top' }
+      }
     }
   });
 }
 
-// Diagramm als PNG herunterladen (gleich wie in charts.js)
+// Funktion zum Downloaden eines Canvas in hoher Auflösung
+function downloadHighResChart(canvasId, filename, scaleFactor = 4) {
+  const originalCanvas = document.getElementById(canvasId);
+  if (!originalCanvas) {
+    console.warn("Canvas nicht gefunden: " + canvasId);
+    return;
+  }
+  const offScreenCanvas = document.createElement('canvas');
+  offScreenCanvas.width = originalCanvas.width * scaleFactor;
+  offScreenCanvas.height = originalCanvas.height * scaleFactor;
+  const ctx = offScreenCanvas.getContext('2d');
+
+  // Weißer Hintergrund, um Transparenzprobleme zu vermeiden
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, offScreenCanvas.width, offScreenCanvas.height);
+
+  ctx.scale(scaleFactor, scaleFactor);
+  ctx.drawImage(originalCanvas, 0, 0);
+
+  const dataURL = offScreenCanvas.toDataURL("image/png");
+  const link = document.createElement('a');
+  link.href = dataURL;
+  link.download = filename;
+  link.click();
+}
+
+// Standard-Download (ohne Skalierung) falls benötigt
 function downloadChart(canvasId, filename) {
   const canvas = document.getElementById(canvasId);
+  if (!canvas) {
+    console.warn("Canvas-Element nicht gefunden: " + canvasId);
+    return;
+  }
   const link = document.createElement('a');
-  link.href = canvas.toDataURL('image/png');
+  link.href = canvas.toDataURL("image/png");
   link.download = filename;
   link.click();
 }
