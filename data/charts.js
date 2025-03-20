@@ -16,10 +16,12 @@ const flowColors = {
 };
 
 document.addEventListener('DOMContentLoaded', function() {
-  // Beim Laden der Seite werden die initialen Diagramme erstellt…
   fetch('/api/last10min')
     .then(response => response.json())
     .then(data => {
+      // UNIX-Zeitstempel (in Sekunden) in Date-Objekte umwandeln
+      data.timestamps = data.timestamps.map(ts => new Date(ts * 1000));
+      
       createPressureChart(data);
       createFlowChart(data);
       createCombinedChart(data);
@@ -28,18 +30,51 @@ document.addEventListener('DOMContentLoaded', function() {
       setInterval(updateCharts, 1000);
     })
     .catch(error => console.error("Fehler beim Laden der Diagrammdaten:", error));
-  
-  // Download-Buttons für die Diagramme
-  document.getElementById('downloadPressure').addEventListener('click', () => {
-    downloadChart('pressureChart', 'pressure_chart.png');
-  });
-  document.getElementById('downloadFlow').addEventListener('click', () => {
-    downloadChart('flowChart', 'flow_chart.png');
-  });
-  document.getElementById('downloadCombined').addEventListener('click', () => {
-    downloadChart('combinedChart', 'combined_chart.png');
-  });
 });
+
+function updateCharts() {
+  fetch('/api/last10min')
+    .then(response => response.json())
+    .then(data => {
+      // Auch hier die Zeitstempel umwandeln
+      data.timestamps = data.timestamps.map(ts => new Date(ts * 1000));
+      
+      // Update Pressure Chart
+      if (pressureChartInstance) {
+        pressureChartInstance.data.labels = data.timestamps;
+        pressureChartInstance.data.datasets.forEach((dataset, index) => {
+          dataset.data = data.pressure["sensor" + (index + 1)];
+        });
+        pressureChartInstance.update();
+      }
+      
+      // Update Flow Chart
+      if (flowChartInstance) {
+        flowChartInstance.data.labels = data.timestamps;
+        flowChartInstance.data.datasets.forEach((dataset, index) => {
+          dataset.data = data.flow["sensor" + (index + 1)];
+        });
+        flowChartInstance.update();
+      }
+      
+      // Update Combined Chart
+      if (combinedChartInstance) {
+        combinedChartInstance.data.labels = data.timestamps;
+        combinedChartInstance.data.datasets.forEach(ds => {
+          if (ds.label.includes("Pressure")) {
+            const sensorNumber = ds.label.match(/\d+/)[0];
+            ds.data = data.pressure["sensor" + sensorNumber];
+          } else if (ds.label.includes("Flow")) {
+            const sensorNumber = ds.label.match(/\d+/)[0];
+            ds.data = data.flow["sensor" + sensorNumber];
+          }
+        });
+        combinedChartInstance.update();
+      }
+    })
+    .catch(error => console.error("Fehler beim Aktualisieren der Diagrammdaten:", error));
+}
+
 
 function createPressureChart(data) {
   const ctx = document.getElementById('pressureChart').getContext('2d');
@@ -65,8 +100,14 @@ function createPressureChart(data) {
       scales: {
         x: {
           type: 'time',
-          time: { unit: 'minute' },
-          title: { display: true, text: 'Zeit' }
+          time: {
+            unit: 'minute',
+            tooltipFormat: 'dd.MM.yyyy HH:mm:ss', // Format für Tooltips
+            displayFormats: {
+              minute: 'dd.MM.yyyy HH:mm' // Angezeigtes Format für Minuten
+            }
+          },
+          title: { display: true, text: 'Datum und Uhrzeit' }
         },
         y: {
           title: { display: true, text: 'Druck (bar)' }
@@ -101,8 +142,14 @@ function createFlowChart(data) {
       scales: {
         x: {
           type: 'time',
-          time: { unit: 'minute' },
-          title: { display: true, text: 'Zeit' }
+          time: {
+            unit: 'minute',
+            tooltipFormat: 'dd.MM.yyyy HH:mm:ss', // Format für Tooltips
+            displayFormats: {
+              minute: 'dd.MM.yyyy HH:mm' // Angezeigtes Format für Minuten
+            }
+          },
+          title: { display: true, text: 'Datum und Uhrzeit' }
         },
         y: {
           title: { display: true, text: 'Durchfluss (L/min)' }
@@ -151,8 +198,14 @@ function createCombinedChart(data) {
       scales: {
         x: {
           type: 'time',
-          time: { unit: 'minute' },
-          title: { display: true, text: 'Zeit' }
+          time: {
+            unit: 'minute',
+            tooltipFormat: 'dd.MM.yyyy HH:mm:ss', // Format für Tooltips
+            displayFormats: {
+              minute: 'dd.MM.yyyy HH:mm' // Angezeigtes Format für Minuten
+            }
+          },
+          title: { display: true, text: 'Datum und Uhrzeit' }
         },
         yPressure: {
           type: 'linear',
