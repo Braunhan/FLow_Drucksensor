@@ -68,7 +68,7 @@ SensorData dataBuffer[BUFFER_SIZE];  // Puffer für die letzten 10 Minuten
 int bufferIndex = 0;                   // Aktueller Index im Puffer
 
 // ---  In-Memory-Datenpuffer für Messwerte der geloggten Daten ---
-#define LOGGING_BUFFER_SIZE 2000  // z.B. 1000 Einträge für den Logging-Puffer
+#define LOGGING_BUFFER_SIZE 2100  // z.B. 1000 Einträge für den Logging-Puffer
 
 struct LoggingData {
   time_t timestamp;
