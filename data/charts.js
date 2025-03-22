@@ -26,11 +26,17 @@ document.addEventListener('DOMContentLoaded', function() {
       createFlowChart(data);
       createCombinedChart(data);
       
+      // Füge Event-Listener für die Download-Buttons hinzu
+      document.getElementById("downloadPressure").addEventListener("click", () => downloadChart("pressureChart", "pressureChart.png"));
+      document.getElementById("downloadFlow").addEventListener("click", () => downloadChart("flowChart", "flowChart.png"));
+      document.getElementById("downloadCombined").addEventListener("click", () => downloadChart("combinedChart", "combinedChart.png"));
+      
       // Starte periodisches Aktualisieren – alle 1 Sekunde
       setInterval(updateCharts, 1000);
     })
     .catch(error => console.error("Fehler beim Laden der Diagrammdaten:", error));
 });
+
 
 function updateCharts() {
   fetch('/api/last10min')
