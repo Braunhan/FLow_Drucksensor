@@ -67,7 +67,6 @@ function sortDataByTimestamp(data) {
   });
 
   // Sortiere aufsteigend nach Datum/Uhrzeit, indem wir die Strings manuell in JS-Date umwandeln
-  // Nur zum Vergleichen! -> new Date(a.timestamp)
   combined.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
   // Extrahiere die sortierten Arrays zurück in data
@@ -160,8 +159,12 @@ function createPressureChart(data) {
       responsive: true,
       scales: {
         x: {
-          type: 'category', // Geändert von 'time' zu 'category'
-          title: { display: true, text: 'Datum und Uhrzeit' }
+          type: 'category', // Anzeige der Zeitstempel als Text
+          title: { display: true, text: 'Datum und Uhrzeit' },
+          ticks: {
+            autoSkip: true,
+            maxTicksLimit: 20
+          }
         },
         y: {
           title: { display: true, text: 'Druck (bar)' }
@@ -207,8 +210,12 @@ function createFlowChart(data) {
       responsive: true,
       scales: {
         x: {
-          type: 'category', // Geändert von 'time' zu 'category'
-          title: { display: true, text: 'Datum und Uhrzeit' }
+          type: 'category', // Anzeige der Zeitstempel als Text
+          title: { display: true, text: 'Datum und Uhrzeit' },
+          ticks: {
+            autoSkip: true,
+            maxTicksLimit: 20
+          }
         },
         y: {
           title: { display: true, text: 'Durchfluss (L/min)' }
@@ -270,8 +277,12 @@ function createCombinedChart(data) {
       responsive: true,
       scales: {
         x: {
-          type: 'category', // Geändert von 'time' zu 'category'
-          title: { display: true, text: 'Datum und Uhrzeit' }
+          type: 'category', // Anzeige der Zeitstempel als Text
+          title: { display: true, text: 'Datum und Uhrzeit' },
+          ticks: {
+            autoSkip: true,
+            maxTicksLimit: 20
+          }
         },
         yPressure: {
           type: 'linear',
