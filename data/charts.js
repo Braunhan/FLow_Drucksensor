@@ -38,50 +38,6 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 
-function updateCharts() {
-  fetch('/api/last10min')
-    .then(response => response.json())
-    .then(data => {
-      // Auch hier die Zeitstempel umwandeln
-      data.timestamps = data.timestamps.map(ts => new Date(ts * 1000));
-      
-      // Update Pressure Chart
-      if (pressureChartInstance) {
-        pressureChartInstance.data.labels = data.timestamps;
-        pressureChartInstance.data.datasets.forEach((dataset, index) => {
-          dataset.data = data.pressure["sensor" + (index + 1)];
-        });
-        pressureChartInstance.update();
-      }
-      
-      // Update Flow Chart
-      if (flowChartInstance) {
-        flowChartInstance.data.labels = data.timestamps;
-        flowChartInstance.data.datasets.forEach((dataset, index) => {
-          dataset.data = data.flow["sensor" + (index + 1)];
-        });
-        flowChartInstance.update();
-      }
-      
-      // Update Combined Chart
-      if (combinedChartInstance) {
-        combinedChartInstance.data.labels = data.timestamps;
-        combinedChartInstance.data.datasets.forEach(ds => {
-          if (ds.label.includes("Pressure")) {
-            const sensorNumber = ds.label.match(/\d+/)[0];
-            ds.data = data.pressure["sensor" + sensorNumber];
-          } else if (ds.label.includes("Flow")) {
-            const sensorNumber = ds.label.match(/\d+/)[0];
-            ds.data = data.flow["sensor" + sensorNumber];
-          }
-        });
-        combinedChartInstance.update();
-      }
-    })
-    .catch(error => console.error("Fehler beim Aktualisieren der Diagrammdaten:", error));
-}
-
-
 function createPressureChart(data) {
   const ctx = document.getElementById('pressureChart').getContext('2d');
   const datasets = [];
