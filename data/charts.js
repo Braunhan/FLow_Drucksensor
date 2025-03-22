@@ -37,7 +37,6 @@ document.addEventListener('DOMContentLoaded', function() {
     .catch(error => console.error("Fehler beim Laden der Diagrammdaten:", error));
 });
 
-
 function createPressureChart(data) {
   const ctx = document.getElementById('pressureChart').getContext('2d');
   const datasets = [];
@@ -48,7 +47,7 @@ function createPressureChart(data) {
       borderColor: pressureColors[`sensor${i}`],
       backgroundColor: pressureColors[`sensor${i}`],
       fill: false,
-      tension: 0.1
+      showLine: false // Linienverbindung deaktivieren
     });
   }
   pressureChartInstance = new Chart(ctx, {
@@ -90,7 +89,7 @@ function createFlowChart(data) {
       borderColor: flowColors[`sensor${i}`],
       backgroundColor: flowColors[`sensor${i}`],
       fill: false,
-      tension: 0.1
+      showLine: false // Linienverbindung deaktivieren
     });
   }
   flowChartInstance = new Chart(ctx, {
@@ -133,7 +132,7 @@ function createCombinedChart(data) {
       borderColor: pressureColors[`sensor${i}`],
       backgroundColor: pressureColors[`sensor${i}`],
       fill: false,
-      tension: 0.1,
+      showLine: false, // Linienverbindung deaktivieren
       yAxisID: 'yPressure'
     });
   }
@@ -145,7 +144,7 @@ function createCombinedChart(data) {
       borderColor: flowColors[`sensor${i}`],
       backgroundColor: flowColors[`sensor${i}`],
       fill: false,
-      tension: 0.1,
+      showLine: false, // Linienverbindung deaktivieren
       yAxisID: 'yFlow'
     });
   }
