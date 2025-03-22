@@ -10,13 +10,13 @@ let combinedChartInstance = null;
 // ======================================================================
 const pressureColors = {
   sensor1: "rgba(255, 99, 132, 1)",   // Rot
-  sensor2: "rgba(54, 162, 235, 1)",  // Blau
-  sensor3: "rgba(255, 206, 86, 1)",  // Gelb
-  sensor4: "rgba(75, 192, 192, 1)"   // Grün
+  sensor2: "rgba(54, 162, 235, 1)",    // Blau
+  sensor3: "rgba(255, 206, 86, 1)",    // Gelb
+  sensor4: "rgba(75, 192, 192, 1)"     // Grün
 };
 const flowColors = {
-  sensor1: "rgba(153, 102, 255, 1)", // Lila
-  sensor2: "rgba(255, 159, 64, 1)"   // Orange
+  sensor1: "rgba(153, 102, 255, 1)",   // Lila
+  sensor2: "rgba(255, 159, 64, 1)"      // Orange
 };
 
 // ======================================================================
@@ -160,15 +160,7 @@ function createPressureChart(data) {
       responsive: true,
       scales: {
         x: {
-          type: 'time',
-          // Wichtig: Hier definieren wir den parser für das Format "YYYY-MM-DD HH:mm:ss"
-          time: {
-            parser: 'yyyy-MM-dd HH:mm:ss',
-            tooltipFormat: 'dd.MM.yyyy HH:mm:ss',
-            displayFormats: {
-              minute: 'dd.MM.yyyy HH:mm'
-            }
-          },
+          type: 'category', // Geändert von 'time' zu 'category'
           title: { display: true, text: 'Datum und Uhrzeit' }
         },
         y: {
@@ -215,14 +207,7 @@ function createFlowChart(data) {
       responsive: true,
       scales: {
         x: {
-          type: 'time',
-          time: {
-            parser: 'yyyy-MM-dd HH:mm:ss',
-            tooltipFormat: 'dd.MM.yyyy HH:mm:ss',
-            displayFormats: {
-              minute: 'dd.MM.yyyy HH:mm'
-            }
-          },
+          type: 'category', // Geändert von 'time' zu 'category'
           title: { display: true, text: 'Datum und Uhrzeit' }
         },
         y: {
@@ -285,14 +270,7 @@ function createCombinedChart(data) {
       responsive: true,
       scales: {
         x: {
-          type: 'time',
-          time: {
-            parser: 'yyyy-MM-dd HH:mm:ss',
-            tooltipFormat: 'dd.MM.yyyy HH:mm:ss',
-            displayFormats: {
-              minute: 'dd.MM.yyyy HH:mm'
-            }
-          },
+          type: 'category', // Geändert von 'time' zu 'category'
           title: { display: true, text: 'Datum und Uhrzeit' }
         },
         yPressure: {
