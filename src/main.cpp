@@ -571,17 +571,37 @@ void handleUpdateCalibration() {
 
     int sensorIndex = doc["sensor"];
     if(sensorIndex >=0 && sensorIndex <4) {
-      // Temporäre V-Werte
-      pressureSensor_V_min[sensorIndex] = doc["v_min"];
-      pressureSensor_V_max[sensorIndex] = doc["v_max"];
-      
-      // Permanente PSI-Werte
+
+      // NEU: Lies den alten Zustand aus dem Array
+      float oldVmin = pressureSensor_V_min[sensorIndex];
+      float oldVmax = pressureSensor_V_max[sensorIndex];
+
+      // Die neu übermittelten Werte
+      float newVmin = doc["v_min"];
+      float userVmax = doc["v_max"];
+
+      // Berechne, um wieviel sich v_min ändert
+      float shift = newVmin - oldVmin;
+
+      // Prüfe, ob der User V_max tatsächlich geändert hat:
+      // Ist die Differenz userVmax - oldVmax sehr klein? Dann hat der User
+      // den V_max-Wert praktisch unangetastet gelassen => wir verschieben ihn automatisch
+      if (fabs(userVmax - oldVmax) < 0.001) {
+        userVmax = oldVmax + shift;
+      }
+
+      // Jetzt V_min und V_max ins RAM übernehmen
+      pressureSensor_V_min[sensorIndex] = newVmin;
+      pressureSensor_V_max[sensorIndex] = userVmax;
+
+      // PSI-Werte
       pressureSensor_PSI_min[sensorIndex] = doc["psi_min"];
       pressureSensor_PSI_max[sensorIndex] = doc["psi_max"];
+
+      // Nur PSI-Werte bleiben EEPROM-persistent
       saveCalibration();
 
-      server.send(200, "application/json", 
-        "{\"status\":\"success\",\"sensor\":"+String(sensorIndex)+"}");
+      server.send(200, "application/json", "{\"status\":\"success\"}");
     } else {
       server.send(400, "text/plain", "Ungültiger Sensorindex");
     }
@@ -589,6 +609,7 @@ void handleUpdateCalibration() {
     server.send(400, "text/plain", "Keine Daten empfangen");
   }
 }
+
 
 // Fügt eine Seite hinzu, auf der die Kalibrierung in einem separaten Layout erfolgt.
 void handleCalibrateHtml() {
@@ -795,6 +816,10 @@ float calibrateSensorVmin(uint8_t sensorIndex) {
   unsigned long startTime = millis();
   int sampleCount = 0;
 
+  // 1) Alten v_min und v_max sichern:
+  float oldVmin = pressureSensor_V_min[sensorIndex];
+  float oldVmax = pressureSensor_V_max[sensorIndex];
+
   // Messung durchführen
   while (millis() - startTime < calibrationDuration && sampleCount < maxSamples) {
       int16_t rawValue = ads.readADC_SingleEnded(sensorIndex);
@@ -809,17 +834,24 @@ float calibrateSensorVmin(uint8_t sensorIndex) {
       return NAN;
   }
 
-  // Sortiere Samples für Median-Berechnung
+  // 2) Sortieren für Median
   std::sort(samples, samples + sampleCount);
-  
-  // Berechne Median
   float median = samples[sampleCount / 2];
-  
-  // Aktualisiere nur den temporären V_min-Wert (kein EEPROM-Schreibvorgang!)
-  pressureSensor_V_min[sensorIndex] = median;
 
-  Serial.printf("Sensor %d: Neuer V_min = %.3f V (temporär, gilt bis zum Neustart)\n", 
-               sensorIndex + 1, median);
+  // 3) Berechne die Verschiebung (shift = neuer_v_min − alter_v_min)
+  float shift = median - oldVmin;
+
+  // 4) Setze den neuen v_min und verschiebe v_max um denselben Betrag
+  pressureSensor_V_min[sensorIndex] = median;
+  pressureSensor_V_max[sensorIndex] = oldVmax + shift;
+
+  // Debug-Ausgabe
+  Serial.printf(
+      "Sensor %d: Neuer V_min = %.3f V, V_max = %.3f V (temporär, bis Neustart)\n",
+      sensorIndex + 1,
+      pressureSensor_V_min[sensorIndex],
+      pressureSensor_V_max[sensorIndex]
+  );
 
   return median;
 }

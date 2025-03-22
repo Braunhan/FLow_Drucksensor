@@ -46,7 +46,10 @@ async function saveSettings(sensorIndex) {
       
       const result = await response.text();
       alert(result + '\nV-Werte gelten bis zum Neustart!');
-      loadCalibrationData();
+      
+      // Nach erfolgreichem Speichern Seite neu laden:
+      window.location.reload();
+
   } catch (error) {
       showError('Speichern fehlgeschlagen:', error);
   }
@@ -69,6 +72,9 @@ async function autoCalibrate(sensorIndex) {
       if(result.status === "success") {
           document.getElementById(`sensor${sensorIndex + 1}Vmin`).value = result.v_min.toFixed(2);
           alert(`V_min kalibriert: ${result.v_min.toFixed(2)} V\nGilt bis zum Neustart!`);
+          
+          // Nach erfolgreichem Auto-Kalibrieren Seite neu laden:
+          window.location.reload();
       } else {
           throw new Error('Kalibrierung fehlgeschlagen');
       }
@@ -77,13 +83,21 @@ async function autoCalibrate(sensorIndex) {
   }
 }
 
+/**
+ * Reset: Nach dem Zurücksetzen der Felder sofort speichern => 
+ *       Werte werden zum Server geschickt und Seite neu geladen.
+ */
 function resetSensor(sensorIndex) {
   const sensorNumber = sensorIndex + 1;
   document.getElementById(`sensor${sensorNumber}Vmin`).value = 0.50;
   document.getElementById(`sensor${sensorNumber}Vmax`).value = 4.50;
   document.getElementById(`sensor${sensorNumber}PSImin`).value = 0.0;
   document.getElementById(`sensor${sensorNumber}PSImax`).value = 10.0;
-  alert(`Sensor ${sensorNumber} auf Standard zurückgesetzt`);
+
+  alert(`Sensor ${sensorNumber} auf Standard zurückgesetzt.\n(Werte werden gespeichert.)`);
+  
+  // --> Sofort speichert die neuen Standardwerte:
+  saveSettings(sensorIndex);
 }
 
 function setupEventListeners() {
