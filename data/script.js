@@ -121,9 +121,12 @@ function initLoggingCharts() {
         responsive: true,
         scales: {
           x: {
-            type: 'category',
+            type: 'category', // Anzeige der Zeitstempel als Text
             title: { display: true, text: 'Datum und Uhrzeit' },
-            ticks: { autoSkip: true, maxTicksLimit: 10 }
+            ticks: {
+              autoSkip: true,
+              maxTicksLimit: 20
+            }
           },
           y: {
             title: { display: true, text: 'Druck (bar)' }
@@ -157,9 +160,12 @@ function initLoggingCharts() {
         responsive: true,
         scales: {
           x: {
-            type: 'category',
+            type: 'category', // Anzeige der Zeitstempel als Text
             title: { display: true, text: 'Datum und Uhrzeit' },
-            ticks: { autoSkip: true, maxTicksLimit: 10 }
+            ticks: {
+              autoSkip: true,
+              maxTicksLimit: 20
+            }
           },
           y: {
             title: { display: true, text: 'Durchfluss (L/min)' }
@@ -207,9 +213,12 @@ function initLoggingCharts() {
         responsive: true,
         scales: {
           x: {
-            type: 'category',
+            type: 'category', // Anzeige der Zeitstempel als Text
             title: { display: true, text: 'Datum und Uhrzeit' },
-            ticks: { autoSkip: true, maxTicksLimit: 10 }
+            ticks: {
+              autoSkip: true,
+              maxTicksLimit: 20
+            }
           },
           yPressure: {
             type: 'linear',
